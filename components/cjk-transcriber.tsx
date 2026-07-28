@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { KeyDef, Phrase } from "@/lib/arabic-mapping"
 import type { ReferenceItem } from "@/lib/korean-mapping"
-import { Copy, Check, Trash2, Keyboard, Languages, Loader2, Bookmark } from "lucide-react"
+import { Copy, Check, Trash2, Keyboard, Languages, Loader2, Bookmark, BookmarkCheck, X } from "lucide-react"
 
 interface CjkTranscriberProps {
   /** Display name of the script, e.g. "Korean" or "Japanese" */
@@ -86,6 +86,51 @@ export function CjkTranscriber({
   const [isTranslating, setIsTranslating] = useState(false)
   const [source, setSource] = useState<Source>(null)
   const lastProcessedRef = useRef<string>("")
+
+  // Saved Latin-text bookmarks, persisted per script so the user can build a
+  // personal review list on this device (no account required).
+  const bookmarksKey = `wei-bookmarks-${scriptName.toLowerCase()}`
+  const [bookmarks, setBookmarks] = useState<string[]>([])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(bookmarksKey)
+      setBookmarks(raw ? JSON.parse(raw) : [])
+    } catch {
+      setBookmarks([])
+    }
+  }, [bookmarksKey])
+
+  const persistBookmarks = (next: string[]) => {
+    setBookmarks(next)
+    try {
+      localStorage.setItem(bookmarksKey, JSON.stringify(next))
+    } catch {
+      // Ignore storage errors (e.g. private mode) — bookmarks stay in memory.
+    }
+  }
+
+  const trimmedLatin = latinText.trim()
+  const isBookmarked = trimmedLatin !== "" && bookmarks.includes(trimmedLatin)
+
+  const handleToggleBookmark = () => {
+    if (!trimmedLatin) return
+    if (bookmarks.includes(trimmedLatin)) {
+      persistBookmarks(bookmarks.filter((b) => b !== trimmedLatin))
+    } else {
+      persistBookmarks([trimmedLatin, ...bookmarks])
+    }
+  }
+
+  const handleLoadBookmark = (text: string) => {
+    setSource("latin")
+    setLatinText(text)
+    setScriptText(toScript(text))
+  }
+
+  const handleRemoveBookmark = (text: string) => {
+    persistBookmarks(bookmarks.filter((b) => b !== text))
+  }
 
   // When a case split is configured, only show one half of the keyboard at a
   // time: the lowercase set (e.g. hiragana) by default, or the uppercase set
@@ -297,19 +342,40 @@ export function CjkTranscriber({
                   Latin Text
                 </label>
                 {latinText && (
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(latinText, setCopiedLatin)}>
-                    {copiedLatin ? (
-                      <>
-                        <Check className="h-4 w-4 mr-1" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleToggleBookmark}
+                      title={isBookmarked ? "Remove from saved bookmarks" : "Save this Latin text"}
+                      aria-pressed={isBookmarked}
+                    >
+                      {isBookmarked ? (
+                        <>
+                          <BookmarkCheck className="h-4 w-4 mr-1" />
+                          Saved
+                        </>
+                      ) : (
+                        <>
+                          <Bookmark className="h-4 w-4 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(latinText, setCopiedLatin)}>
+                      {copiedLatin ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 )}
               </div>
               <Textarea
@@ -408,6 +474,42 @@ export function CjkTranscriber({
               </Button>
             )}
           </div>
+
+          {/* Saved bookmarks - user's personal review list */}
+          {bookmarks.length > 0 && (
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <BookmarkCheck className="h-4 w-4" />
+                Saved for review
+                <span className="text-xs font-normal text-muted-foreground">({bookmarks.length})</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {bookmarks.map((b) => (
+                  <div
+                    key={b}
+                    className="group inline-flex items-center rounded-md border bg-background overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleLoadBookmark(b)}
+                      className="px-2.5 py-1 font-mono text-xs hover:bg-muted transition-colors max-w-56 truncate"
+                      title={`Load: ${b}`}
+                    >
+                      {b}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBookmark(b)}
+                      aria-label={`Remove bookmark ${b}`}
+                      className="px-1.5 py-1 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors border-l"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Translations */}
           <div className="space-y-2">
