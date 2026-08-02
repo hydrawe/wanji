@@ -167,6 +167,14 @@ export function transcribeKoreanLatin(text: string): string {
     }
 
     if (!token) {
+      // A lone "y" right after a bare vowel syllable is the separator inserted
+      // by transcribeKorean to disambiguate adjacent vowels — consume it and
+      // close the current syllable rather than treating it as a literal.
+      if (text[i] === "y" && L === SILENT_LEAD && V !== null && T === null) {
+        flush()
+        i++
+        continue
+      }
       // Literal character (space, punctuation, digits, etc.)
       flush()
       output += text[i]
@@ -211,8 +219,10 @@ export function transcribeKoreanLatin(text: string): string {
 // initial maps to "" and finals have unique codes, so no vowel-stealing guard
 // is needed.
 export function transcribeKorean(text: string): string {
+  const chars = Array.from(text)
   let output = ""
-  for (const ch of text) {
+  for (let idx = 0; idx < chars.length; idx++) {
+    const ch = chars[idx]
     const code = ch.charCodeAt(0)
     if (code >= HANGUL_BASE && code <= HANGUL_LAST) {
       const s = code - HANGUL_BASE
@@ -220,6 +230,22 @@ export function transcribeKorean(text: string): string {
       const V = Math.floor(s / 28) % 21
       const L = Math.floor(s / 28 / 21)
       output += LEAD_LATIN[L] + VOWEL_LATIN[V] + (T > 0 ? TAIL_LATIN[T] : "")
+
+      // A bare vowel syllable (silent ㅇ initial, no final) that is directly
+      // followed by another vowel-initial syllable gets a trailing "y" as a
+      // separator. Without it the two adjacent vowels can merge into a
+      // different code when read back (e.g. 이아 -> "ia" = ㅑ, 우유 -> "uiu"
+      // where "ui" = ㅢ). The "y" keeps the boundary unambiguous (이아 -> "iya").
+      if (L === SILENT_LEAD && T === 0) {
+        const next = chars[idx + 1]
+        if (next) {
+          const ncode = next.charCodeAt(0)
+          if (ncode >= HANGUL_BASE && ncode <= HANGUL_LAST) {
+            const nL = Math.floor((ncode - HANGUL_BASE) / 28 / 21)
+            if (nL === SILENT_LEAD) output += "y"
+          }
+        }
+      }
     } else {
       output += ch
     }
