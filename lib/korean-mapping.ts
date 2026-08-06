@@ -167,10 +167,11 @@ export function transcribeKoreanLatin(text: string): string {
     }
 
     if (!token) {
-      // A lone "y" right after a bare vowel syllable is the separator inserted
-      // by transcribeKorean to disambiguate adjacent vowels — consume it and
-      // close the current syllable rather than treating it as a literal.
-      if (text[i] === "y" && L === SILENT_LEAD && V !== null && T === null) {
+      // A lone "y" right after a vowel-ending syllable is the separator inserted
+      // by transcribeKorean to disambiguate a syllable boundary — consume it and
+      // close the current syllable rather than treating it as a literal. No jamo
+      // or vowel code begins with "y", so this is never a real token.
+      if (text[i] === "y" && V !== null && T === null) {
         flush()
         i++
         continue
@@ -231,19 +232,16 @@ export function transcribeKorean(text: string): string {
       const L = Math.floor(s / 28 / 21)
       output += LEAD_LATIN[L] + VOWEL_LATIN[V] + (T > 0 ? TAIL_LATIN[T] : "")
 
-      // A bare vowel syllable (silent ㅇ initial, no final) that is directly
-      // followed by another vowel-initial syllable gets a trailing "y" as a
-      // separator. Without it the two adjacent vowels can merge into a
-      // different code when read back (e.g. 이아 -> "ia" = ㅑ, 우유 -> "uiu"
-      // where "ui" = ㅢ). The "y" keeps the boundary unambiguous (이아 -> "iya").
-      if (L === SILENT_LEAD && T === 0) {
+      // Any syllable that ends in a vowel (no final consonant) and is directly
+      // followed by another Hangul syllable (no separating space) gets a
+      // trailing "y" as a separator. This keeps the syllable boundary explicit
+      // so adjacent vowels can't merge into a different code when read back
+      // (e.g. 이아 -> "iya" not "ia" = ㅑ; 우유 -> "uyiu" not "uiu" with "ui" = ㅢ).
+      if (T === 0) {
         const next = chars[idx + 1]
         if (next) {
           const ncode = next.charCodeAt(0)
-          if (ncode >= HANGUL_BASE && ncode <= HANGUL_LAST) {
-            const nL = Math.floor((ncode - HANGUL_BASE) / 28 / 21)
-            if (nL === SILENT_LEAD) output += "y"
-          }
+          if (ncode >= HANGUL_BASE && ncode <= HANGUL_LAST) output += "y"
         }
       }
     } else {
