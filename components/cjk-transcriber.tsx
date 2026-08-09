@@ -15,6 +15,11 @@ interface CjkTranscriberProps {
   langCode: string
   /** script -> Latin transcription */
   toLatin: (text: string) => string
+  /** Optional async script -> Latin transcription. When provided it is used
+   * instead of `toLatin` for converting script into Latin (e.g. Japanese needs
+   * to resolve kanji readings via an async analyzer). `toLatin` is still used
+   * as the synchronous fallback/initial value. */
+  toLatinAsync?: (text: string) => Promise<string>
   /** Latin -> script transcription (composes syllables/kana) */
   toScript: (text: string) => string
   /** Virtual keyboard layout */
@@ -60,6 +65,7 @@ export function CjkTranscriber({
   scriptName,
   langCode,
   toLatin,
+  toLatinAsync,
   toScript,
   keyboardRows,
   phrases,
@@ -255,6 +261,29 @@ export function CjkTranscriber({
     const debounceTimer = setTimeout(run, 600)
     return () => clearTimeout(debounceTimer)
   }, [source, scriptText, englishText, chineseText, langCode, toLatin])
+
+  // When an async romanizer is provided (e.g. Japanese kanji readings), refine
+  // the Latin field from the current script asynchronously. The sync toLatin
+  // result is shown immediately elsewhere; this upgrades it once the analyzer
+  // resolves. A cancel flag prevents an out-of-order result from overwriting a
+  // newer edit.
+  useEffect(() => {
+    if (!toLatinAsync) return
+    if (!scriptText.trim()) return
+    let cancelled = false
+    toLatinAsync(scriptText)
+      .then((latin) => {
+        if (!cancelled) {
+          setLatinText((prev) => (prev === latin ? prev : latin))
+        }
+      })
+      .catch(() => {
+        // Ignore — the sync fallback value already populated the field.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scriptText, toLatinAsync])
 
   const handleLatinChange = (value: string) => {
     setSource("latin")
