@@ -135,17 +135,17 @@ export async function transcribeJapaneseWithKanji(text: string): Promise<string>
 }
 
 /**
- * Resolve Japanese text (possibly containing kanji) into an all-hiragana
- * string. Downstream consumers (e.g. IPA generation) can then work on kana
- * instead of raw kanji. Text without kanji is returned unchanged.
+ * Resolve Japanese text into an all-hiragana string, spaced at the same phrase
+ * (bunsetsu) boundaries as the romaji so downstream IPA/pronunciation is broken
+ * into sentence parts instead of one mashed-together string. Text without kanji
+ * is still tokenized so pure-kana sentences get the same spacing. Falls back to
+ * the raw text if the analyzer can't load.
  */
 export async function toKanaReading(text: string): Promise<string> {
-  if (!text || !hasKanji(text)) {
-    return text
-  }
+  if (!text) return ""
   try {
-    const kuroshiro = await getKuroshiro()
-    return await kuroshiro.convert(text, { to: "hiragana", mode: "normal" })
+    const units = await readingUnits(text)
+    return units.join(" ")
   } catch {
     return text
   }
