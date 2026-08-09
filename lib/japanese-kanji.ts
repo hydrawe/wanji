@@ -16,9 +16,19 @@ import { transcribeJapanese } from "./japanese-mapping"
 // are served from /public so the browser can load them.
 const DICT_PATH = "/kuromoji-dict"
 
-type KanjiConverter = (text: string) => Promise<string>
+type KuromojiToken = {
+  surface_form: string
+  pos: string
+  pos_detail_1?: string
+  reading?: string
+}
 
-let converterPromise: Promise<KanjiConverter> | null = null
+type Kuroshiro = {
+  convert: (text: string, opts: { to: string; mode: string }) => Promise<string>
+  _analyzer: { parse: (text: string) => Promise<KuromojiToken[]> }
+}
+
+let kuroshiroPromise: Promise<Kuroshiro> | null = null
 
 // Detect whether the string contains any CJK ideographs (kanji). Pure kana or
 // latin text needs no analyzer, so we can skip loading the heavy dictionary.
@@ -28,50 +38,95 @@ export function hasKanji(text: string): boolean {
   return KANJI_RE.test(text)
 }
 
-async function buildConverter(): Promise<KanjiConverter> {
+async function buildKuroshiro(): Promise<Kuroshiro> {
   // Import the browser dist bundles directly (the default entry targets Node).
   const KuroshiroModule = await import("kuroshiro/dist/kuroshiro.min.js")
   const AnalyzerModule = await import("kuroshiro-analyzer-kuromoji/dist/kuroshiro-analyzer-kuromoji.min.js")
 
-  const Kuroshiro = (KuroshiroModule as any).default ?? KuroshiroModule
+  const KuroshiroCtor = (KuroshiroModule as any).default ?? KuroshiroModule
   const KuromojiAnalyzer = (AnalyzerModule as any).default ?? AnalyzerModule
 
-  const kuroshiro = new Kuroshiro()
+  const kuroshiro = new KuroshiroCtor()
   await kuroshiro.init(new KuromojiAnalyzer({ dictPath: DICT_PATH }))
-
-  return async (text: string) => {
-    // "toHiragana" rewrites kanji into their reading while leaving existing
-    // kana as-is; mode "normal" avoids furigana/okurigana markup.
-    const result: string = await kuroshiro.convert(text, { to: "hiragana", mode: "normal" })
-    return result
-  }
+  return kuroshiro as Kuroshiro
 }
 
-function getConverter(): Promise<KanjiConverter> {
-  if (!converterPromise) {
-    converterPromise = buildConverter().catch((err) => {
+function getKuroshiro(): Promise<Kuroshiro> {
+  if (!kuroshiroPromise) {
+    kuroshiroPromise = buildKuroshiro().catch((err) => {
       // Reset so a later attempt can retry after a transient load failure.
-      converterPromise = null
+      kuroshiroPromise = null
       throw err
     })
   }
-  return converterPromise
+  return kuroshiroPromise
+}
+
+// Convert a katakana string (kuromoji readings are katakana) into hiragana so
+// it can be fed to the app's kana romanizer. The prolonged-sound mark ー and
+// any non-katakana characters are left untouched.
+function katakanaToHiragana(text: string): string {
+  return text.replace(/[\u30a1-\u30f6]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+}
+
+// Part-of-speech tags (kuromoji uses Japanese labels) that head a new phrase
+// unit (bunsetsu). Function words like particles (助詞) and auxiliary verbs
+// (助動詞) instead attach to the preceding content word.
+const CONTENT_POS = new Set(["名詞", "動詞", "形容詞", "副詞", "連体詞", "接続詞", "感動詞", "フィラー"])
+
+/**
+ * Split Japanese text into phrase units (bunsetsu) and return each unit as an
+ * all-hiragana reading. A new unit begins at each content word (noun, verb,
+ * adjective, …); particles, auxiliaries and suffixes stick to the current unit.
+ * A preceding prefix (接頭詞) also attaches to the following content word.
+ * These units line up with sentence roles — subject, object, predicate, etc.
+ */
+async function readingUnits(text: string): Promise<string[]> {
+  const kuroshiro = await getKuroshiro()
+  const tokens = await kuroshiro._analyzer.parse(text)
+
+  const units: string[] = []
+  let current = ""
+  let prevWasPrefix = false
+
+  for (const token of tokens) {
+    const pos = token.pos
+    const raw = token.reading && token.reading !== "*" ? token.reading : token.surface_form
+    const kana = katakanaToHiragana(raw)
+
+    if (pos === "記号") {
+      // Punctuation: keep attached to the current unit (no awkward split).
+      current += kana
+      prevWasPrefix = false
+      continue
+    }
+
+    const startsUnit = CONTENT_POS.has(pos) || pos === "接頭詞"
+    if (startsUnit && current && !prevWasPrefix) {
+      units.push(current)
+      current = ""
+    }
+
+    current += kana
+    prevWasPrefix = pos === "接頭詞"
+  }
+
+  if (current) units.push(current)
+  return units
 }
 
 /**
- * Romanize Japanese text including kanji. Kanji are resolved to their reading
- * via kuromoji, then the whole (now all-kana) string is romanized with the
- * app's existing kana scheme. Text without kanji skips the analyzer entirely
- * and is romanized synchronously-equivalent.
+ * Romanize Japanese text including kanji, inserting spaces between phrase units
+ * (bunsetsu) so the result reads as separated sentence parts — subject,
+ * object, predicate, etc. Kanji are resolved to their reading via kuromoji and
+ * each phrase unit is romanized with the app's existing kana scheme. Falls back
+ * to spaceless kana romanization if the analyzer can't load.
  */
 export async function transcribeJapaneseWithKanji(text: string): Promise<string> {
-  if (!text || !hasKanji(text)) {
-    return transcribeJapanese(text)
-  }
+  if (!text) return ""
   try {
-    const convert = await getConverter()
-    const kana = await convert(text)
-    return transcribeJapanese(kana)
+    const units = await readingUnits(text)
+    return units.map((u) => transcribeJapanese(u)).join(" ")
   } catch {
     // If the dictionary fails to load, fall back to kana-only romanization so
     // the field still updates (kanji simply pass through unchanged).
@@ -89,8 +144,8 @@ export async function toKanaReading(text: string): Promise<string> {
     return text
   }
   try {
-    const convert = await getConverter()
-    return await convert(text)
+    const kuroshiro = await getKuroshiro()
+    return await kuroshiro.convert(text, { to: "hiragana", mode: "normal" })
   } catch {
     return text
   }
