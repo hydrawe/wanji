@@ -78,3 +78,20 @@ export async function transcribeJapaneseWithKanji(text: string): Promise<string>
     return transcribeJapanese(text)
   }
 }
+
+/**
+ * Resolve Japanese text (possibly containing kanji) into an all-hiragana
+ * string. Downstream consumers (e.g. IPA generation) can then work on kana
+ * instead of raw kanji. Text without kanji is returned unchanged.
+ */
+export async function toKanaReading(text: string): Promise<string> {
+  if (!text || !hasKanji(text)) {
+    return text
+  }
+  try {
+    const convert = await getConverter()
+    return await convert(text)
+  } catch {
+    return text
+  }
+}

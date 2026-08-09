@@ -21,7 +21,7 @@ import {
   japaneseReference,
   japaneseReferenceRows,
 } from "@/lib/japanese-mapping"
-import { transcribeJapaneseWithKanji } from "@/lib/japanese-kanji"
+import { transcribeJapaneseWithKanji, toKanaReading } from "@/lib/japanese-kanji"
 
 export default function Home() {
   return (
@@ -65,6 +65,7 @@ export default function Home() {
               toLatinAsync={transcribeJapaneseWithKanji}
               toScript={transcribeJapaneseLatin}
               toIpa={transcribeJapaneseIpa}
+              toPhoneticScriptAsync={toKanaReading}
               ipaMap={japaneseIpa}
               keyboardRows={japaneseKeyboardRows}
               keyboardColumns={5}

@@ -38,6 +38,10 @@ interface CjkTranscriberProps {
   referenceRows?: { description: string; rows: (ReferenceItem | null)[][] }[]
   /** script -> IPA phonetic transcription, shown as accessible pronunciation notes */
   toIpa?: (text: string) => string
+  /** Optional async normalization of the script before IPA/pronunciation is
+   * computed. Japanese uses this to resolve kanji into their kana reading so
+   * the IPA reflects the actual pronunciation instead of the kanji glyphs. */
+  toPhoneticScriptAsync?: (text: string) => Promise<string>
   /** script char -> IPA symbol, shown in the letter reference */
   ipaMap?: Record<string, string>
   /** When set, the keyboard renders each row as a fixed N-column grid on all
@@ -74,11 +78,15 @@ export function CjkTranscriber({
   referenceTitle,
   referenceRows,
   toIpa,
+  toPhoneticScriptAsync,
   ipaMap,
   keyboardColumns,
   keyboardCase,
 }: CjkTranscriberProps) {
   const [scriptText, setScriptText] = useState("")
+  // The script normalized for pronunciation (kanji resolved to kana). Falls back
+  // to the raw script until the async resolver returns.
+  const [phoneticScript, setPhoneticScript] = useState("")
   const [latinText, setLatinText] = useState("")
   const [englishText, setEnglishText] = useState("")
   const [chineseText, setChineseText] = useState("")
@@ -147,9 +155,12 @@ export function CjkTranscriber({
       : keyboardRows.slice(0, keyboardCase.lowerCount)
     : keyboardRows
 
-  // IPA phonetic transcription of the current script text, shown as accessible
-  // pronunciation notes so the pronunciation is readable without audio.
-  const ipaText = toIpa && scriptText.trim() ? toIpa(scriptText) : ""
+  // IPA phonetic transcription, shown as accessible pronunciation notes so the
+  // pronunciation is readable without audio. When an async phonetic resolver is
+  // provided (Japanese kanji -> kana), IPA is computed from that resolved kana
+  // so it reflects the actual sound rather than the kanji glyphs.
+  const scriptForIpa = toPhoneticScriptAsync ? phoneticScript : scriptText
+  const ipaText = toIpa && scriptForIpa.trim() ? toIpa(scriptForIpa) : ""
 
   // Group the flat reference list into subsections by their description
   // (e.g. Initial consonant / Vowel / Final consonant), preserving first-seen order.
@@ -284,6 +295,29 @@ export function CjkTranscriber({
       cancelled = true
     }
   }, [scriptText, toLatinAsync])
+
+  // Resolve the script into a phonetic (kana) form for IPA. Shows the raw script
+  // immediately, then upgrades once the analyzer resolves kanji readings.
+  useEffect(() => {
+    if (!toPhoneticScriptAsync) return
+    if (!scriptText.trim()) {
+      setPhoneticScript("")
+      return
+    }
+    let cancelled = false
+    // Optimistic fallback so IPA isn't blank while the analyzer loads.
+    setPhoneticScript(scriptText)
+    toPhoneticScriptAsync(scriptText)
+      .then((kana) => {
+        if (!cancelled) setPhoneticScript((prev) => (prev === kana ? prev : kana))
+      })
+      .catch(() => {
+        // Ignore — the raw script fallback is already set.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scriptText, toPhoneticScriptAsync])
 
   const handleLatinChange = (value: string) => {
     setSource("latin")
