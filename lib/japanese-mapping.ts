@@ -60,6 +60,10 @@ const KANA_TO_CODE = new Map<string, string>()
 for (const [code, kana] of ALL) {
   if (!KANA_TO_CODE.has(kana)) KANA_TO_CODE.set(kana, code)
 }
+// The prolonged-sound mark is a katakana mark, so romanize it with the
+// uppercase code to keep katakana loanwords fully uppercase
+// (e.g. バンクーバー -> BANKUXBAX). Both "x" and "X" still map back to ー.
+KANA_TO_CODE.set("ー", "X")
 
 const MAX_CODE_LEN = 2
 

@@ -69,6 +69,16 @@ function katakanaToHiragana(text: string): string {
   return text.replace(/[\u30a1-\u30f6]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 }
 
+// A token written in katakana is a loanword (e.g. シアトル "Seattle",
+// バンクーバー "Vancouver"). Its reading should stay katakana so it romanizes
+// with the app's uppercase codes; kanji and hiragana tokens use the hiragana
+// reading (lowercase codes). The prolonged mark ー is ignored for detection.
+const KATAKANA_RE = /[\u30a1-\u30f6]/
+const HIRAGANA_OR_KANJI_RE = /[\u3040-\u309f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/
+function isKatakanaWord(surface: string): boolean {
+  return KATAKANA_RE.test(surface) && !HIRAGANA_OR_KANJI_RE.test(surface)
+}
+
 // Part-of-speech tags (kuromoji uses Japanese labels) that head a new phrase
 // unit (bunsetsu). Function words like particles (助詞) and auxiliary verbs
 // (助動詞) instead attach to the preceding content word.
@@ -92,7 +102,9 @@ async function readingUnits(text: string): Promise<string[]> {
   for (const token of tokens) {
     const pos = token.pos
     const raw = token.reading && token.reading !== "*" ? token.reading : token.surface_form
-    const kana = katakanaToHiragana(raw)
+    // Keep katakana loanwords as katakana (uppercase romaji); convert kanji /
+    // hiragana readings to hiragana (lowercase romaji).
+    const kana = isKatakanaWord(token.surface_form) ? raw : katakanaToHiragana(raw)
 
     if (pos === "記号") {
       // Punctuation: keep attached to the current unit (no awkward split).
