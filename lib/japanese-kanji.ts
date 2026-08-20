@@ -84,6 +84,20 @@ function isKatakanaWord(surface: string): boolean {
 // (助動詞) instead attach to the preceding content word.
 const CONTENT_POS = new Set(["名詞", "動詞", "形容詞", "副詞", "連体詞", "接続詞", "感動詞", "フィラー"])
 
+// Kuromoji can occasionally select an incorrect reading for established
+// compounds. Keep a small lexical override table for verified readings; these
+// overrides are shared by romanization and IPA normalization.
+const JAPANESE_READING_OVERRIDES: Record<string, string> = {
+  全身性: "ぜんしんせい",
+}
+
+function applyReadingOverrides(text: string): string {
+  return Object.entries(JAPANESE_READING_OVERRIDES).reduce(
+    (result, [surface, reading]) => result.replaceAll(surface, reading),
+    text,
+  )
+}
+
 /**
  * Split Japanese text into phrase units (bunsetsu) and return each unit as an
  * all-hiragana reading. A new unit begins at each content word (noun, verb,
@@ -92,8 +106,12 @@ const CONTENT_POS = new Set(["名詞", "動詞", "形容詞", "副詞", "連体�
  * These units line up with sentence roles — subject, object, predicate, etc.
  */
 async function readingUnits(text: string): Promise<string[]> {
+  const directReading = JAPANESE_READING_OVERRIDES[text]
+  if (directReading) return [directReading]
+
+  const normalizedText = applyReadingOverrides(text)
   const kuroshiro = await getKuroshiro()
-  const tokens = await kuroshiro._analyzer.parse(text)
+  const tokens = await kuroshiro._analyzer.parse(normalizedText)
 
   const units: string[] = []
   let current = ""
