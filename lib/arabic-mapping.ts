@@ -49,6 +49,17 @@ export const arabicMapping: Record<string, string> = {
   'خ': 'xv',
   'م': 'm',
 
+  // Arabic punctuation -> familiar Latin punctuation (no bracket markers)
+  '،': ',', // Arabic comma
+  '؛': ';', // Arabic semicolon
+  '؟': '?', // Arabic question mark
+  '٪': '%', // Arabic percent sign
+  '٫': '.', // Arabic decimal separator
+  '٬': ',', // Arabic thousands separator
+  'ـ': '-', // Tatweel / kashida
+  '«': '"',
+  '»': '"',
+
   // Diacritics (vowel marks)
   'ً': 'av', // tanwin fatha (accusative)
   'ٌ': 'uv', // tanwin damma (nominative)
