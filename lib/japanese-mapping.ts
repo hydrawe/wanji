@@ -67,6 +67,35 @@ KANA_TO_CODE.set("ー", "X")
 
 const MAX_CODE_LEN = 2
 
+// Normalize Japanese punctuation to the ASCII punctuation used in Latin
+// transliteration, without bracket markers.
+const JAPANESE_PUNCTUATION: Record<string, string> = {
+  "、": ",",
+  "。": ".",
+  "，": ",",
+  "．": ".",
+  "！": "!",
+  "？": "?",
+  "；": ";",
+  "：": ":",
+  "（": "(",
+  "）": ")",
+  "［": "[",
+  "］": "]",
+  "｛": "{",
+  "｝": "}",
+  "「": '"',
+  "」": '"',
+  "『": '"',
+  "』": '"',
+  "【": "[",
+  "】": "]",
+  "・": "/",
+  "〜": "~",
+  "～": "~",
+  "　": " ",
+}
+
 // Latin (romaji) -> Kana, longest-match from left.
 export function transcribeJapaneseLatin(text: string): string {
   let output = ""
@@ -84,7 +113,7 @@ export function transcribeJapaneseLatin(text: string): string {
       }
     }
     if (!matched) {
-      output += text[i]
+      output += JAPANESE_PUNCTUATION[text[i]] ?? text[i]
       i++
     }
   }
@@ -95,7 +124,7 @@ export function transcribeJapaneseLatin(text: string): string {
 export function transcribeJapanese(text: string): string {
   let output = ""
   for (const ch of text) {
-    output += KANA_TO_CODE.get(ch) ?? ch
+    output += KANA_TO_CODE.get(ch) ?? JAPANESE_PUNCTUATION[ch] ?? ch
   }
   return output
 }

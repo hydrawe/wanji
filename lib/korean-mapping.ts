@@ -23,6 +23,34 @@ const HANGUL_LAST = 0xd7a3
 // automatically gets ㅇ as its initial (so "a" -> 아).
 const SILENT_LEAD = 11
 
+// Normalize native Korean punctuation to the ASCII punctuation used in the
+// Latin transliteration, without adding bracket markers.
+const KOREAN_PUNCTUATION: Record<string, string> = {
+  "，": ",",
+  "。": ".",
+  "、": ",",
+  "！": "!",
+  "？": "?",
+  "；": ";",
+  "：": ":",
+  "（": "(",
+  "）": ")",
+  "［": "[",
+  "］": "]",
+  "｛": "{",
+  "｝": "}",
+  "「": '"',
+  "」": '"',
+  "『": '"',
+  "』": '"',
+  "‘": "'",
+  "’": "'",
+  "＂": '"',
+  "％": "%",
+  "＆": "&",
+  "～": "~",
+}
+
 // --- Initial consonants (choseong), index 0-18 -----------------------------
 // [latin code, compatibility jamo for display]. The ㅇ initial is silent ("").
 const LEAD: [string, string][] = [
@@ -245,7 +273,7 @@ export function transcribeKorean(text: string): string {
         }
       }
     } else {
-      output += ch
+      output += KOREAN_PUNCTUATION[ch] ?? ch
     }
   }
   return output
