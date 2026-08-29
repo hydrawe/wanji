@@ -79,11 +79,6 @@ function isKatakanaWord(surface: string): boolean {
   return KATAKANA_RE.test(surface) && !HIRAGANA_OR_KANJI_RE.test(surface)
 }
 
-// Part-of-speech tags (kuromoji uses Japanese labels) that head a new phrase
-// unit (bunsetsu). Function words like particles (助詞) and auxiliary verbs
-// (助動詞) instead attach to the preceding content word.
-const CONTENT_POS = new Set(["名詞", "動詞", "形容詞", "副詞", "連体詞", "接続詞", "感動詞", "フィラー"])
-
 // Kuromoji can occasionally select an incorrect reading for established
 // compounds. Keep a small lexical override table for verified readings; these
 // overrides are shared by romanization and IPA normalization.
@@ -115,30 +110,27 @@ async function readingUnits(text: string): Promise<string[]> {
 
   const units: string[] = []
   let current = ""
-  let prevWasPrefix = false
 
   for (const token of tokens) {
-    const pos = token.pos
     const raw = token.reading && token.reading !== "*" ? token.reading : token.surface_form
     // Keep katakana loanwords as katakana (uppercase romaji); convert kanji /
     // hiragana readings to hiragana (lowercase romaji).
     const kana = isKatakanaWord(token.surface_form) ? raw : katakanaToHiragana(raw)
 
-    if (pos === "記号") {
-      // Punctuation: keep attached to the current unit (no awkward split).
-      current += kana
-      prevWasPrefix = false
+    if (token.pos === "記号") {
+      // Keep punctuation beside the preceding word rather than creating a
+      // dangling space before commas or sentence-ending marks.
+      if (current) current += kana
+      else if (units.length) units[units.length - 1] += kana
+      else units.push(kana)
       continue
     }
 
-    const startsUnit = CONTENT_POS.has(pos) || pos === "接頭詞"
-    if (startsUnit && current && !prevWasPrefix) {
-      units.push(current)
-      current = ""
-    }
-
-    current += kana
-    prevWasPrefix = pos === "接頭詞"
+    // Emit every lexical token as its own unit. This deliberately separates
+    // particles (助詞), verbs (動詞), nouns/kanji (名詞), and other words with
+    // independent meaning: 私は学生です -> watasi ha gakusei desu.
+    if (current) units.push(current)
+    current = kana
   }
 
   if (current) units.push(current)
