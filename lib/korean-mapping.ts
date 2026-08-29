@@ -257,11 +257,30 @@ export function transcribeKoreanLatin(text: string): string {
   return output
 }
 
+// Common Korean case/topic, object, location, and comparison particles. They
+// are separated from the preceding eojeol in Latin output (한국어는 -> 한국어 는).
+const KOREAN_PARTICLES = [
+  "으로", "에서", "에게", "한테", "까지", "부터", "보다", "처럼", "이랑", "랑",
+  "은", "는", "이", "가", "을", "를", "에", "의", "로", "와", "과", "도", "만",
+]
+
+function addParticleBoundaries(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((part) => {
+      if (!/^[가-힣]+$/.test(part)) return part
+      const particle = KOREAN_PARTICLES.find((candidate) => part.endsWith(candidate))
+      if (!particle || part.length === particle.length) return part
+      return `${part.slice(0, -particle.length)} ${particle}`
+    })
+    .join("")
+}
+
 // Hangul -> Latin, decomposing precomposed syllable blocks. The silent ㅇ
 // initial maps to "" and finals have unique codes, so no vowel-stealing guard
 // is needed.
 export function transcribeKorean(text: string): string {
-  const chars = Array.from(text)
+  const chars = Array.from(addParticleBoundaries(text))
   let output = ""
   for (let idx = 0; idx < chars.length; idx++) {
     const ch = chars[idx]
