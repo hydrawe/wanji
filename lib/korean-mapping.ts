@@ -65,7 +65,7 @@ const LEAD: [string, string][] = [
   ["bb", "ㅃ"],
   ["s", "ㅅ"],
   ["ss", "ㅆ"],
-  ["", "ㅇ"], // silent initial (auto-inserted before a bare vowel)
+  ["v", "ㅇ"], // initial ㅇ uses v; bare vowels still auto-insert ㅇ silently
   ["j", "ㅈ"],
   ["jj", "ㅉ"],
   ["c", "ㅊ"],
@@ -105,40 +105,44 @@ const VOWEL: [string, string][] = [
 // --- Final consonants (jongseong), index 1-27 (0 = none) -------------------
 // Each final has a unique code that never overlaps with initial/vowel codes.
 const TAIL: [string, string][] = [
-  ["q", "ㄱ"],
-  ["qq", "ㄲ"],
-  ["qz", "ㄳ"],
-  ["v", "ㄴ"],
-  ["jv", "ㄵ"],
-  ["hv", "ㄶ"],
-  ["dy", "ㄷ"],
+  ["g", "ㄱ"],
+  ["gg", "ㄲ"],
+  ["gs", "ㄳ"],
+  ["n", "ㄴ"],
+  ["nj", "ㄵ"],
+  ["nh", "ㄶ"],
+  ["d", "ㄷ"],
   ["r", "ㄹ"],
-  ["gr", "ㄺ"],
-  ["mr", "ㄻ"],
-  ["br", "ㄼ"],
-  ["zr", "ㄽ"],
-  ["tr", "ㄾ"],
-  ["pr", "ㄿ"],
-  ["hr", "ㅀ"],
-  ["my", "ㅁ"],
-  ["by", "ㅂ"],
-  ["bz", "ㅄ"],
-  ["z", "ㅅ"],
-  ["zz", "ㅆ"],
-  ["vq", "ㅇ"],
-  ["jy", "ㅈ"],
-  ["cy", "ㅊ"],
-  ["ky", "ㅋ"],
-  ["ty", "ㅌ"],
-  ["py", "ㅍ"],
-  ["hy", "ㅎ"],
+  ["rg", "ㄺ"],
+  ["rm", "ㄻ"],
+  ["rb", "ㄼ"],
+  ["rs", "ㄽ"],
+  ["rt", "ㄾ"],
+  ["rp", "ㄿ"],
+  ["rh", "ㅀ"],
+  ["m", "ㅁ"],
+  ["b", "ㅂ"],
+  ["bs", "ㅄ"],
+  ["s", "ㅅ"],
+  ["ss", "ㅆ"],
+  ["v", "ㅇ"],
+  ["j", "ㅈ"],
+  ["c", "ㅊ"],
+  ["k", "ㅋ"],
+  ["t", "ㅌ"],
+  ["p", "ㅍ"],
+  ["h", "ㅎ"],
 ]
 
 // --- Code lookup ------------------------------------------------------------
 type Token = { type: "L" | "V" | "T"; index: number }
 const CODE_MAP = new Map<string, Token>()
+const LEAD_CODE_INDEX = new Map<string, number>()
 LEAD.forEach(([code], i) => {
-  if (code) CODE_MAP.set(code, { type: "L", index: i })
+  if (code) {
+    LEAD_CODE_INDEX.set(code, i)
+    CODE_MAP.set(code, { type: "L", index: i })
+  }
 })
 VOWEL.forEach(([code], i) => CODE_MAP.set(code, { type: "V", index: i }))
 TAIL.forEach(([code], i) => CODE_MAP.set(code, { type: "T", index: i + 1 })) // 1-based
@@ -212,6 +216,15 @@ export function transcribeKoreanLatin(text: string): string {
     }
 
     i += matchLen
+
+    // Several requested final codes intentionally overlap initial codes (g, n,
+    // r, etc.). Interpret a shared code by syllable position: before a vowel it
+    // is the initial; after a vowel it is the final. This preserves both maps.
+    const matchedCode = text.slice(i - matchLen, i)
+    const sharedInitial = LEAD_CODE_INDEX.get(matchedCode)
+    if (token.type === "T" && V === null && sharedInitial !== undefined) {
+      token = { type: "L", index: sharedInitial }
+    }
 
     if (token.type === "L") {
       // Initial consonant always begins a new syllable.
