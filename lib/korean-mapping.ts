@@ -273,17 +273,16 @@ export function transcribeKorean(text: string): string {
       const L = Math.floor(s / 28 / 21)
       output += LEAD_LATIN[L] + VOWEL_LATIN[V] + (T > 0 ? TAIL_LATIN[T] : "")
 
-      // Any syllable that ends in a vowel (no final consonant) and is directly
-      // followed by another Hangul syllable (no separating space) gets a
-      // trailing "y" as a separator. This keeps the syllable boundary explicit
-      // so adjacent vowels can't merge into a different code when read back
-      // (e.g. 이아 -> "iya" not "ia" = ㅑ; 우유 -> "uyiu" not "uiu" with "ui" = ㅢ).
-      if (T === 0) {
-        const next = chars[idx + 1]
-        if (next) {
-          const ncode = next.charCodeAt(0)
-          if (ncode >= HANGUL_BASE && ncode <= HANGUL_LAST) output += "y"
-        }
+      // When Hangul syllables are written without a source space, add a hyphen
+      // between their Latin forms so each Korean syllable remains readable.
+      // Vowel-ending syllables also keep the existing "y" disambiguator before
+      // the hyphen (e.g. 이아 -> "iya-", not the ambiguous "ia").
+      const next = chars[idx + 1]
+      const nextCode = next?.charCodeAt(0)
+      const nextIsHangul = nextCode !== undefined && nextCode >= HANGUL_BASE && nextCode <= HANGUL_LAST
+      if (nextIsHangul) {
+        if (T === 0) output += "y"
+        output += "-"
       }
     } else {
       output += KOREAN_PUNCTUATION[ch] ?? ch
