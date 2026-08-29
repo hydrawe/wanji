@@ -65,7 +65,7 @@ const LEAD: [string, string][] = [
   ["bb", "ㅃ"],
   ["s", "ㅅ"],
   ["ss", "ㅆ"],
-  ["v", "ㅇ"], // initial ㅇ uses v; bare vowels still auto-insert ㅇ silently
+  ["", "ㅇ"], // initial ㅇ is silent; final ㅇ is transliterated as "ng"
   ["j", "ㅈ"],
   ["jj", "ㅉ"],
   ["c", "ㅊ"],
@@ -125,7 +125,7 @@ const TAIL: [string, string][] = [
   ["bs", "ㅄ"],
   ["s", "ㅅ"],
   ["ss", "ㅆ"],
-  ["v", "ㅇ"],
+  ["ng", "ㅇ"],
   ["j", "ㅈ"],
   ["c", "ㅊ"],
   ["k", "ㅋ"],
