@@ -65,7 +65,7 @@ const LEAD: [string, string][] = [
   ["bb", "ㅃ"],
   ["s", "ㅅ"],
   ["ss", "ㅆ"],
-  ["", "ㅇ"], // silent initial (auto-inserted before a bare vowel)
+  ["", "ㅇ"], // initial ㅇ is silent; final ㅇ is transliterated as "ng"
   ["j", "ㅈ"],
   ["jj", "ㅉ"],
   ["c", "ㅊ"],
@@ -105,40 +105,44 @@ const VOWEL: [string, string][] = [
 // --- Final consonants (jongseong), index 1-27 (0 = none) -------------------
 // Each final has a unique code that never overlaps with initial/vowel codes.
 const TAIL: [string, string][] = [
-  ["q", "ㄱ"],
-  ["qq", "ㄲ"],
-  ["qz", "ㄳ"],
-  ["v", "ㄴ"],
-  ["jv", "ㄵ"],
-  ["hv", "ㄶ"],
-  ["dy", "ㄷ"],
+  ["g", "ㄱ"],
+  ["gg", "ㄲ"],
+  ["gs", "ㄳ"],
+  ["n", "ㄴ"],
+  ["nj", "ㄵ"],
+  ["nh", "ㄶ"],
+  ["d", "ㄷ"],
   ["r", "ㄹ"],
-  ["gr", "ㄺ"],
-  ["mr", "ㄻ"],
-  ["br", "ㄼ"],
-  ["zr", "ㄽ"],
-  ["tr", "ㄾ"],
-  ["pr", "ㄿ"],
-  ["hr", "ㅀ"],
-  ["my", "ㅁ"],
-  ["by", "ㅂ"],
-  ["bz", "ㅄ"],
-  ["z", "ㅅ"],
-  ["zz", "ㅆ"],
-  ["vq", "ㅇ"],
-  ["jy", "ㅈ"],
-  ["cy", "ㅊ"],
-  ["ky", "ㅋ"],
-  ["ty", "ㅌ"],
-  ["py", "ㅍ"],
-  ["hy", "ㅎ"],
+  ["rg", "ㄺ"],
+  ["rm", "ㄻ"],
+  ["rb", "ㄼ"],
+  ["rs", "ㄽ"],
+  ["rt", "ㄾ"],
+  ["rp", "ㄿ"],
+  ["rh", "ㅀ"],
+  ["m", "ㅁ"],
+  ["b", "ㅂ"],
+  ["bs", "ㅄ"],
+  ["s", "ㅅ"],
+  ["ss", "ㅆ"],
+  ["ng", "ㅇ"],
+  ["j", "ㅈ"],
+  ["c", "ㅊ"],
+  ["k", "ㅋ"],
+  ["t", "ㅌ"],
+  ["p", "ㅍ"],
+  ["h", "ㅎ"],
 ]
 
 // --- Code lookup ------------------------------------------------------------
 type Token = { type: "L" | "V" | "T"; index: number }
 const CODE_MAP = new Map<string, Token>()
+const LEAD_CODE_INDEX = new Map<string, number>()
 LEAD.forEach(([code], i) => {
-  if (code) CODE_MAP.set(code, { type: "L", index: i })
+  if (code) {
+    LEAD_CODE_INDEX.set(code, i)
+    CODE_MAP.set(code, { type: "L", index: i })
+  }
 })
 VOWEL.forEach(([code], i) => CODE_MAP.set(code, { type: "V", index: i }))
 TAIL.forEach(([code], i) => CODE_MAP.set(code, { type: "T", index: i + 1 })) // 1-based
@@ -213,6 +217,15 @@ export function transcribeKoreanLatin(text: string): string {
 
     i += matchLen
 
+    // Several requested final codes intentionally overlap initial codes (g, n,
+    // r, etc.). Interpret a shared code by syllable position: before a vowel it
+    // is the initial; after a vowel it is the final. This preserves both maps.
+    const matchedCode = text.slice(i - matchLen, i)
+    const sharedInitial = LEAD_CODE_INDEX.get(matchedCode)
+    if (token.type === "T" && V === null && sharedInitial !== undefined) {
+      token = { type: "L", index: sharedInitial }
+    }
+
     if (token.type === "L") {
       // Initial consonant always begins a new syllable.
       flush()
@@ -244,11 +257,30 @@ export function transcribeKoreanLatin(text: string): string {
   return output
 }
 
+// Common Korean case/topic, object, location, and comparison particles. They
+// are separated from the preceding eojeol in Latin output (한국어는 -> 한국어 는).
+const KOREAN_PARTICLES = [
+  "으로", "에서", "에게", "한테", "까지", "부터", "보다", "처럼", "이랑", "랑",
+  "은", "는", "이", "가", "을", "를", "에", "의", "로", "와", "과", "도", "만",
+]
+
+function addParticleBoundaries(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((part) => {
+      if (!/^[가-힣]+$/.test(part)) return part
+      const particle = KOREAN_PARTICLES.find((candidate) => part.endsWith(candidate))
+      if (!particle || part.length === particle.length) return part
+      return `${part.slice(0, -particle.length)} ${particle}`
+    })
+    .join("")
+}
+
 // Hangul -> Latin, decomposing precomposed syllable blocks. The silent ㅇ
 // initial maps to "" and finals have unique codes, so no vowel-stealing guard
 // is needed.
 export function transcribeKorean(text: string): string {
-  const chars = Array.from(text)
+  const chars = Array.from(addParticleBoundaries(text))
   let output = ""
   for (let idx = 0; idx < chars.length; idx++) {
     const ch = chars[idx]
@@ -260,18 +292,6 @@ export function transcribeKorean(text: string): string {
       const L = Math.floor(s / 28 / 21)
       output += LEAD_LATIN[L] + VOWEL_LATIN[V] + (T > 0 ? TAIL_LATIN[T] : "")
 
-      // Any syllable that ends in a vowel (no final consonant) and is directly
-      // followed by another Hangul syllable (no separating space) gets a
-      // trailing "y" as a separator. This keeps the syllable boundary explicit
-      // so adjacent vowels can't merge into a different code when read back
-      // (e.g. 이아 -> "iya" not "ia" = ㅑ; 우유 -> "uyiu" not "uiu" with "ui" = ㅢ).
-      if (T === 0) {
-        const next = chars[idx + 1]
-        if (next) {
-          const ncode = next.charCodeAt(0)
-          if (ncode >= HANGUL_BASE && ncode <= HANGUL_LAST) output += "y"
-        }
-      }
     } else {
       output += KOREAN_PUNCTUATION[ch] ?? ch
     }
