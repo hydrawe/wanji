@@ -275,15 +275,11 @@ export function transcribeKorean(text: string): string {
 
       // When Hangul syllables are written without a source space, add a hyphen
       // between their Latin forms so each Korean syllable remains readable.
-      // Vowel-ending syllables also keep the existing "y" disambiguator before
-      // the hyphen (e.g. 이아 -> "iya-", not the ambiguous "ia").
+      // Vowel-ending syllables do not need an additional "y" separator.
       const next = chars[idx + 1]
       const nextCode = next?.charCodeAt(0)
       const nextIsHangul = nextCode !== undefined && nextCode >= HANGUL_BASE && nextCode <= HANGUL_LAST
-      if (nextIsHangul) {
-        if (T === 0) output += "y"
-        output += "-"
-      }
+      if (nextIsHangul) output += "-"
     } else {
       output += KOREAN_PUNCTUATION[ch] ?? ch
     }
