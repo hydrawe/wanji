@@ -273,13 +273,6 @@ export function transcribeKorean(text: string): string {
       const L = Math.floor(s / 28 / 21)
       output += LEAD_LATIN[L] + VOWEL_LATIN[V] + (T > 0 ? TAIL_LATIN[T] : "")
 
-      // When Hangul syllables are written without a source space, add a hyphen
-      // between their Latin forms so each Korean syllable remains readable.
-      // Vowel-ending syllables do not need an additional "y" separator.
-      const next = chars[idx + 1]
-      const nextCode = next?.charCodeAt(0)
-      const nextIsHangul = nextCode !== undefined && nextCode >= HANGUL_BASE && nextCode <= HANGUL_LAST
-      if (nextIsHangul) output += "-"
     } else {
       output += KOREAN_PUNCTUATION[ch] ?? ch
     }
