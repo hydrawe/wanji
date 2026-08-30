@@ -494,7 +494,7 @@ const TAIL_IPA_BY_INDEX = TAIL_CODA_IPA
 // --- Virtual keyboard -------------------------------------------------------
 const keyOf = ([code, jamo]: [string, string]): KeyDef => ({ latin: code, arabic: jamo, label: code })
 
-const SINGLE_LEAD_CODES = ["g", "n", "d", "l", "m", "b", "s", "j", "c", "h", "k", "t", "p"]
+const SINGLE_LEAD_CODES = ["g", "n", "d", "r", "m", "b", "s", "j", "c", "h", "k", "t", "p"]
 const DOUBLE_LEAD_CODES = ["gg", "dd", "bb", "ss", "jj"]
 const leadByCode = (code: string) => LEAD.find(([c]) => c === code)!
 const vowelByJamo = (jamo: string) => VOWEL.find(([, j]) => j === jamo)!
