@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Arabic Transliteration Tool',
-  description: 'Convert Arabic script to readable romanized text using the Wei transliteration system',
+  title: 'Wei Transliteration',
+  description: 'Convert Arabic, Korean, and Japanese script to readable romanized text using the Wei transliteration system',
   generator: 'v0.app',
   icons: {
     icon: [
