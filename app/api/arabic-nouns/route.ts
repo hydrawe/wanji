@@ -10,16 +10,43 @@ const nounSchema = z.object({
 })
 
 // Conservative local fallback for when the model/gateway is temporarily
-// unavailable. It is intentionally additive: the AI result remains primary.
+// unavailable. Arabic morphology alone cannot reliably distinguish nouns from
+// adjectives, so use a curated vocabulary and explicit exclusions rather than
+// treating endings such as ة or ية as proof of nounhood.
 function heuristicNouns(text: string) {
   const tokens = text.split(/\s+/).filter(Boolean)
-  const likelyNoun = /^(?:ال|و?ال|ب?ال|ك?ال|ل?ال)?[^\s،؛.!؟,:]+(?:ة|ات|اء|ان|ين|ون|ية|ال|مناعة|جهاز|خطر|آثار|أمراض|أجسام|عدوى|سرطان)/u
-  const commonNouns = new Set(["الأجسام", "المضادّة", "المُضادَّة", "النسيلة", "الجهاز", "المناعي", "آثار", "خطر", "العدوى", "السرطان", "أمراض", "المناعة", "الذاتية"])
-  return tokens
-    .map((token) => token.replace(/^[و、،؛]+|[،؛.!؟,:]+$/gu, ""))
-    .filter((token) => token && (likelyNoun.test(token) || commonNouns.has(token)))
-    .filter((token, index, list) => list.indexOf(token) === index)
-    .map((token) => ({ text: token, normalized: token.replace(/[ًٌٍَُِّْـ]/gu, ""), note: "Likely noun (local fallback)" }))
+  const normalize = (value: string) => value
+    .replace(/^[ووفبكلس]+(?=ال)/u, "")
+    .replace(/[ًٌٍَُِّْـ]/gu, "")
+    .replace(/[إأآٱ]/gu, "ا")
+    .replace(/ى/gu, "ي")
+    .replace(/^[،؛.!؟,:«»]+|[،؛.!؟,:«»]+$/gu, "")
+
+  const nounVocabulary = new Set([
+    "جسم", "اجسام", "الاجسام", "نسيلة", "النسيلة", "جهاز", "الجهاز",
+    "اثر", "اثار", "اثر", "زيادة", "خطر", "العدوى", "عدوى", "السرطان",
+    "سرطان", "الإصابة", "الاصابة", "اصابة", "امراض", "أمراض", "المناعة",
+    "مناعة", "السرطان", "سرطان",
+  ])
+  const nonNounVocabulary = new Set([
+    "المضادة", "مضادة", "وحيدة", "حيدة", "غالبا", "يكون", "تستخدم",
+    "لتثبيط", "المناعي", "مناعي", "جانبية", "سيئة", "الذاتية", "ذاتية",
+    "مثل", "فقد", "قد", "لها", "أو", "و", "أن",
+  ])
+
+  const results = tokens
+    .map((original) => ({ original, token: original.replace(/^[و、،؛]+/u, "").replace(/[،؛.!؟,:«»]+$/gu, "") }))
+    .map(({ original, token }) => ({ original, token, normalized: normalize(token) }))
+    .filter(({ normalized }) => normalized && !nonNounVocabulary.has(normalized))
+    .filter(({ normalized }) => nounVocabulary.has(normalized))
+    .filter(({ token }, index, list) => list.findIndex((item) => item.token === token) === index)
+    .map(({ token, normalized }) => ({
+      text: token,
+      normalized,
+      note: "Arabic noun (local fallback)",
+    }))
+
+  return results
 }
 
 export async function POST(request: Request) {
