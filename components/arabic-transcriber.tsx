@@ -105,6 +105,9 @@ export function ArabicTranscriber({
   const [copiedEnglish, setCopiedEnglish] = useState(false)
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
+  const [nounResults, setNounResults] = useState<{ text: string; normalized: string; note: string }[]>([])
+  const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
+  const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
   const [isTranslating, setIsTranslating] = useState(false)
   // Tracks which field the user last edited so we know the translation direction
@@ -160,6 +163,41 @@ export function ArabicTranscriber({
   // pronunciation notes so the pronunciation is readable (including by screen
   // readers) without relying on audio.
   const ipaText = arabicText.trim() ? toIpa(arabicText) : ""
+
+  useEffect(() => {
+    const text = arabicText.trim()
+    if (!text) {
+      setNounResults([])
+      setNounAnalysisError("")
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setIsAnalyzingNouns(true)
+      setNounAnalysisError("")
+      try {
+        const response = await fetch("/api/arabic-nouns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || "Analysis failed")
+        if (!cancelled) setNounResults(Array.isArray(data?.nouns) ? data.nouns : [])
+      } catch {
+        if (!cancelled) {
+          setNounResults([])
+          setNounAnalysisError("Noun analysis is unavailable right now.")
+        }
+      } finally {
+        if (!cancelled) setIsAnalyzingNouns(false)
+      }
+    }, 800)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [arabicText])
 
   const fetchTranslation = async (text: string, pair: string): Promise<string> => {
     try {
@@ -433,8 +471,39 @@ export function ArabicTranscriber({
             </div>
           </div>
 
-          {/* Common Phrases Bookmarks */}
-          <div className="flex gap-2 flex-wrap items-center">
+              {arabicText.trim() && (
+                <section aria-labelledby="arabic-nouns-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 id="arabic-nouns-heading" className="text-sm font-semibold">Identified nouns</h2>
+                      <p className="text-xs text-muted-foreground">AI-assisted Arabic grammar analysis</p>
+                    </div>
+                    {isAnalyzingNouns && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Analyzing nouns" />}
+                  </div>
+                  {nounAnalysisError ? (
+                    <p className="text-sm text-muted-foreground">{nounAnalysisError}</p>
+                  ) : nounResults.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {nounResults.map((noun, index) => (
+                        <div key={`${noun.text}-${index}`} className="rounded-md border bg-background px-3 py-2">
+                          <div className="flex items-baseline gap-2">
+                            <span lang="ar" dir="rtl" className="text-lg">{noun.text}</span>
+                            <span className="font-mono text-xs text-muted-foreground">{toLatin(noun.text)}</span>
+                          </div>
+                          {noun.note && <p className="mt-1 text-xs text-muted-foreground">{noun.note}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : isAnalyzingNouns ? (
+                    <p className="text-sm text-muted-foreground">Identifying nouns…</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No nouns identified.</p>
+                  )}
+                </section>
+              )}
+
+              {/* Common Phrases Bookmarks */}
+              <div className="flex gap-2 flex-wrap items-center">
             <span className="text-sm text-muted-foreground flex items-center gap-1">
               <Bookmark className="h-3.5 w-3.5" />
               Try:
