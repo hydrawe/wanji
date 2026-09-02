@@ -17,15 +17,20 @@ export async function POST(request: Request) {
     if (text.length > 2000) return Response.json({ error: "Text is too long." }, { status: 400 })
 
     const { output } = await generateText({
-      model: gateway("openai/gpt-4.1"),
+      model: gateway("openai/gpt-4.1-mini"),
       output: Output.object({ schema: nounSchema }),
+      maxRetries: 2,
       system: "You are an Arabic grammar analyst. Identify only nouns in the supplied Arabic text. Preserve each noun span exactly as written, normalize it without diacritics when useful, and give a short English grammatical note. Do not identify pronouns, particles, verbs, adjectives, or punctuation as nouns. Return an empty list when there are no nouns.",
       prompt: text,
     })
 
     return Response.json(output ?? { nouns: [] })
-  } catch {
-    return Response.json({ error: "Unable to analyze Arabic nouns." }, { status: 500 })
+  } catch (error) {
+    console.error("[v0] Arabic noun analysis failed", error)
+    return Response.json(
+      { error: "Unable to analyze Arabic nouns. Please try again." },
+      { status: 502 },
+    )
   }
 }
 
