@@ -502,7 +502,7 @@ export function ArabicTranscriber({
                   ) : isAnalyzingNouns ? (
                     <p className="text-sm text-muted-foreground">Analyzing sentence chunks…</p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No nouns identified.</p>
+                    <p className="text-sm text-muted-foreground">No sentence chunks identified.</p>
                   )}
                 </section>
               )}

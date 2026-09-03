@@ -22,39 +22,14 @@ const nounTranslations: Record<string, string> = {
 // adjectives, so use a curated vocabulary and explicit exclusions rather than
 // treating endings such as ة or ية as proof of nounhood.
 function heuristicChunks(text: string) {
-  const tokens = text.split(/\s+/).filter(Boolean)
-  const normalize = (value: string) => value
-    .replace(/^[ووفبكلس]+(?=ال)/u, "")
-    .replace(/[ًٌٍَُِّْـ]/gu, "")
-    .replace(/[إأآٱ]/gu, "ا")
-    .replace(/ى/gu, "ي")
-    .replace(/^[،؛.!؟,:«»]+|[،؛.!؟,:«»]+$/gu, "")
-
-  const nounVocabulary = new Set([
-    "جسم", "اجسام", "الاجسام", "نسيلة", "النسيلة", "جهاز", "الجهاز",
-    "اثر", "اثار", "اثر", "زيادة", "خطر", "العدوى", "العدوي", "عدوى", "عدوي", "السرطان",
-    "سرطان", "الإصابة", "الاصابة", "اصابة", "امراض", "أمراض", "المناعة",
-    "مناعة", "السرطان", "سرطان",
-  ])
-  const nonNounVocabulary = new Set([
-    "المضادة", "مضادة", "وحيدة", "حيدة", "غالبا", "يكون", "تستخدم",
-    "لتثبيط", "المناعي", "مناعي", "جانبية", "سيئة", "الذاتية", "ذاتية",
-    "مثل", "فقد", "قد", "لها", "أو", "و", "أن",
-  ])
-
-  const results = tokens
-    .map((original) => ({ original, token: original.replace(/^[و、،؛]+/u, "").replace(/[،؛.!؟,:«»]+$/gu, "") }))
-    .map(({ original, token }) => ({ original, token, normalized: normalize(token) }))
-    .filter(({ normalized }) => normalized && !nonNounVocabulary.has(normalized))
-    .filter(({ normalized }) => nounVocabulary.has(normalized))
-    .filter(({ token }, index, list) => list.findIndex((item) => item.token === token) === index)
-    .map(({ token, normalized }) => ({
-      text: token,
-      translation: nounTranslations[normalized] ?? token,
-      attribute: "word chunk",
-    }))
-
-  return results
+  // Fallback still dissects the entire sentence: every word and punctuation
+  // mark gets a row, rather than silently returning only likely nouns.
+  const tokens = text.match(/[\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}\s]/gu) ?? []
+  return tokens.map((token) => ({
+    text: token,
+    translation: token,
+    attribute: /^[\p{L}\p{M}\p{N}]+$/u.test(token) ? "word chunk" : "punctuation",
+  }))
 }
 
 export async function POST(request: Request) {
