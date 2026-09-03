@@ -21,14 +21,25 @@ const nounTranslations: Record<string, string> = {
 // unavailable. Arabic morphology alone cannot reliably distinguish nouns from
 // adjectives, so use a curated vocabulary and explicit exclusions rather than
 // treating endings such as ة or ية as proof of nounhood.
+const fallbackTranslations: Record<string, string> = {
+  وبما: "and since", أن: "that", الأجسام: "the bodies", المضادّة: "antibodies",
+  "المُضادَّة": "antibodies", وحيدة: "single", النسيلة: "monoclonal",
+  غالبًا: "often", ما: "what/that", تستخدم: "are used", لتثبيط: "to suppress",
+  الجهاز: "the system", المناعي: "immune", فقد: "then", يكون: "may be",
+  لها: "they have", آثار: "effects", جانبية: "side", سيئة: "bad",
+  مثل: "such as", زيادة: "increasing", خطر: "risk", العدوى: "infection", والعدوى: "and the infection",
+  أو: "or", السرطان: "cancer", الإصابة: "developing", بأمراض: "diseases",
+  المناعة: "immunity", الذاتية: "autoimmune",
+}
+
 function heuristicChunks(text: string) {
   // Fallback still dissects the entire sentence: every word and punctuation
-  // mark gets a row, rather than silently returning only likely nouns.
+  // mark gets a row, with an actual English gloss when it is known.
   const tokens = text.match(/[\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}\s]/gu) ?? []
   return tokens.map((token) => ({
     text: token,
-    translation: token,
-    attribute: /^[\p{L}\p{M}\p{N}]+$/u.test(token) ? "word chunk" : "punctuation",
+    translation: fallbackTranslations[token] ?? (token === "،" ? "," : token === "." ? "." : "translation unavailable"),
+    attribute: /^[\p{L}\p{M}\p{N}]+$/u.test(token) ? "word" : "punctuation",
   }))
 }
 
