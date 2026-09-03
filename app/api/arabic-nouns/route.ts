@@ -34,8 +34,8 @@ const fallbackTranslations: Record<string, string> = {
 
 function heuristicChunks(text: string) {
   // Keep the fallback useful when the model is unavailable by returning
-  // sentence components: short noun phrases, verb phrases, and prepositional
-  // phrases rather than one row per word or one row for the whole clause.
+  // meaningful sentence components rather than one row per word or one row
+  // for the whole clause.
   const parts = text
     .split(/(?=[،؛.!؟])|(?<=،|؛|!|؟|\.)|(?=\b(?:و?بما أن|فقد|مثل|أو|ل|ب|ك)\b)/u)
     .map((part) => part.trim())
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       model: gateway("openai/gpt-4.1-mini"),
       maxRetries: 1,
       maxOutputTokens: 1200,
-      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}]}. Segment the full sentence into its immediate grammatical components, not individual words and not entire clauses. Prefer short, readable constituents of roughly 1–5 words: subject noun phrase, verb phrase, direct object noun phrase, prepositional phrase, purpose phrase, adverbial phrase, adjective phrase, conjunction, and subordinate-clause component. For example, split a clause into subject + verb phrase + object + modifiers rather than returning the whole clause as one chunk. Preserve every word and punctuation mark exactly once and in order. Translate each component accurately in context and label its grammatical role. Only use a one-word chunk for an independent particle, conjunction, or punctuation mark.',
+      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}]}. Segment the full sentence into only meaningful, coherent grammatical constituents. Do not split merely to satisfy a word limit, and do not return an entire sentence or clause as one chunk when it contains multiple roles. Keep each chunk intact as the smallest natural unit that expresses one function: subject noun phrase, verb phrase, direct object noun phrase, prepositional phrase, purpose phrase, adverbial phrase, adjective phrase, conjunction, or subordinate clause component. Chunk length is flexible; coherence and grammatical function matter more than word count. Preserve every word and punctuation mark exactly once and in order. Translate each component accurately in context and label its grammatical role. Only use a one-word chunk for an independent particle, conjunction, or punctuation mark.',
       prompt: text,
     })
     const json = generatedText.match(/\{[\s\S]*\}/)?.[0]
