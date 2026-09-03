@@ -33,13 +33,30 @@ const fallbackTranslations: Record<string, string> = {
 }
 
 function heuristicChunks(text: string) {
-  // Fallback still dissects the entire sentence: every word and punctuation
-  // mark gets a row, with an actual English gloss when it is known.
-  const tokens = text.match(/[\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}\s]/gu) ?? []
-  return tokens.map((token) => ({
-    text: token,
-    translation: fallbackTranslations[token] ?? (token === "،" ? "," : token === "." ? "." : "translation unavailable"),
-    attribute: /^[\p{L}\p{M}\p{N}]+$/u.test(token) ? "word" : "punctuation",
+  // Keep the fallback useful when the model is unavailable by returning
+  // phrase-sized chunks, not one row per word. Split at clause punctuation and
+  // common Arabic clause markers, then label the resulting grammatical units.
+  const parts = text
+    .split(/(?=[،؛.!؟])|(?<=،|؛|!|؟|\.)|(?=\b(?:و?بما أن|فقد|مثل|أو)\b)/u)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  const translate = (part: string) => part
+    .replace(/[،؛.!؟]/gu, "")
+    .split(/\s+/u)
+    .map((token) => fallbackTranslations[token] ?? token)
+    .join(" ")
+
+  return parts.map((part) => ({
+    text: part,
+    translation: translate(part),
+    attribute: /[،؛.!؟]$/u.test(part)
+      ? "clause / sentence boundary"
+      : /^(?:و?بما أن|فقد|مثل|أو)\b/u.test(part)
+        ? "conjunction or discourse phrase"
+        : /\b(?:تستخدم|يكون|تثبيط|الإصابة)\b/u.test(part)
+          ? "verb phrase"
+          : "noun phrase or modifier",
   }))
 }
 
@@ -55,7 +72,7 @@ export async function POST(request: Request) {
       model: gateway("openai/gpt-4.1-mini"),
       maxRetries: 1,
       maxOutputTokens: 1200,
-      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}]}. Segment the full sentence into meaningful grammatical chunks, preserving every word and punctuation mark exactly once and in order. Translate each chunk accurately in context and label its grammatical attribute concisely, such as noun phrase, verb phrase, prepositional phrase, conjunction, particle, adjective phrase, or punctuation. Do not omit or invent text.',
+      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}]}. Segment the full sentence into meaningful grammatical phrases, not individual words. Group words into constituents such as subject noun phrase, verb phrase, direct object noun phrase, prepositional phrase, purpose phrase, adverbial phrase, conjunction phrase, and subordinate clause. Preserve every word and punctuation mark exactly once and in order. Translate each phrase accurately in context and label its grammatical role. Only use a one-word chunk when it is an independent particle or conjunction.',
       prompt: text,
     })
     const json = generatedText.match(/\{[\s\S]*\}/)?.[0]
