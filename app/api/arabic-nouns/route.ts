@@ -5,9 +5,18 @@ const nounSchema = z.object({
   nouns: z.array(z.object({
     text: z.string(),
     normalized: z.string(),
+    english: z.string(),
     note: z.string(),
   })),
 })
+
+const nounTranslations: Record<string, string> = {
+  جسم: "body", اجسام: "bodies", الاجسام: "bodies",
+  نسيلة: "clone", النسيلة: "the clone", جهاز: "device/system", الجهاز: "the device/system",
+  اثر: "effect", اثار: "effects", زيادة: "increase", خطر: "risk",
+  عدوى: "infection", العدوى: "the infection", سرطان: "cancer", السرطان: "the cancer",
+  اصابة: "injury", الاصابة: "the injury", امراض: "diseases", المناعة: "immunity", مناعة: "immunity",
+}
 
 // Conservative local fallback for when the model/gateway is temporarily
 // unavailable. Arabic morphology alone cannot reliably distinguish nouns from
@@ -24,7 +33,7 @@ function heuristicNouns(text: string) {
 
   const nounVocabulary = new Set([
     "جسم", "اجسام", "الاجسام", "نسيلة", "النسيلة", "جهاز", "الجهاز",
-    "اثر", "اثار", "اثر", "زيادة", "خطر", "العدوى", "عدوى", "السرطان",
+    "اثر", "اثار", "اثر", "زيادة", "خطر", "العدوى", "العدوي", "عدوى", "عدوي", "السرطان",
     "سرطان", "الإصابة", "الاصابة", "اصابة", "امراض", "أمراض", "المناعة",
     "مناعة", "السرطان", "سرطان",
   ])
@@ -43,6 +52,7 @@ function heuristicNouns(text: string) {
     .map(({ token, normalized }) => ({
       text: token,
       normalized,
+      english: nounTranslations[normalized] ?? token,
       note: "Arabic noun (local fallback)",
     }))
 
@@ -61,7 +71,7 @@ export async function POST(request: Request) {
       model: gateway("openai/gpt-4.1-mini"),
       maxRetries: 1,
       maxOutputTokens: 1200,
-      system: 'You are an Arabic grammar analyst. Return ONLY valid JSON in this exact shape: {"nouns":[{"text":"...","normalized":"...","note":"..."}]}. Identify only Arabic nouns. Preserve noun spans exactly as written, normalize without diacritics when useful, and give a short English grammatical note. Do not include pronouns, particles, verbs, adjectives, or punctuation.',
+      system: 'You are an Arabic grammar analyst. Return ONLY valid JSON in this exact shape: {"nouns":[{"text":"...","normalized":"...","english":"...","note":"..."}]}. Identify only Arabic nouns and provide a concise, accurate English translation for each noun in context. Preserve noun spans exactly as written, normalize without diacritics when useful, and give a short English grammatical note. Do not include pronouns, particles, verbs, adjectives, or punctuation.',
       prompt: text,
     })
     const json = generatedText.match(/\{[\s\S]*\}/)?.[0]

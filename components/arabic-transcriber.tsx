@@ -105,7 +105,7 @@ export function ArabicTranscriber({
   const [copiedEnglish, setCopiedEnglish] = useState(false)
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
-  const [nounResults, setNounResults] = useState<{ text: string; normalized: string; note: string }[]>([])
+  const [nounResults, setNounResults] = useState<{ text: string; normalized: string; english: string; note: string }[]>([])
   const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
   const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
@@ -489,6 +489,9 @@ export function ArabicTranscriber({
                           <div className="flex items-baseline gap-2">
                             <span lang="ar" dir="rtl" className="text-lg">{noun.text}</span>
                             <span className="font-mono text-xs text-muted-foreground">{toLatin(noun.text)}</span>
+                          </div>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <span className="text-sm text-foreground font-medium">{noun.english}</span>
                           </div>
                           {noun.note && <p className="mt-1 text-xs text-muted-foreground">{noun.note}</p>}
                         </div>
