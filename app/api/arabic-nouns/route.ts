@@ -1,12 +1,11 @@
 import { gateway, generateText } from "ai"
 import { z } from "zod"
 
-const nounSchema = z.object({
-  nouns: z.array(z.object({
+const chunkSchema = z.object({
+  chunks: z.array(z.object({
     text: z.string(),
-    normalized: z.string(),
-    english: z.string(),
-    note: z.string(),
+    translation: z.string(),
+    attribute: z.string(),
   })),
 })
 
@@ -22,7 +21,7 @@ const nounTranslations: Record<string, string> = {
 // unavailable. Arabic morphology alone cannot reliably distinguish nouns from
 // adjectives, so use a curated vocabulary and explicit exclusions rather than
 // treating endings such as ة or ية as proof of nounhood.
-function heuristicNouns(text: string) {
+function heuristicChunks(text: string) {
   const tokens = text.split(/\s+/).filter(Boolean)
   const normalize = (value: string) => value
     .replace(/^[ووفبكلس]+(?=ال)/u, "")
@@ -51,9 +50,8 @@ function heuristicNouns(text: string) {
     .filter(({ token }, index, list) => list.findIndex((item) => item.token === token) === index)
     .map(({ token, normalized }) => ({
       text: token,
-      normalized,
-      english: nounTranslations[normalized] ?? token,
-      note: "Arabic noun (local fallback)",
+      translation: nounTranslations[normalized] ?? token,
+      attribute: "word chunk",
     }))
 
   return results
@@ -64,25 +62,25 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     text = typeof body?.text === "string" ? body.text.trim() : ""
-    if (!text) return Response.json({ nouns: [] })
+    if (!text) return Response.json({ chunks: [] })
     if (text.length > 2000) return Response.json({ error: "Text is too long." }, { status: 400 })
 
     const { text: generatedText } = await generateText({
       model: gateway("openai/gpt-4.1-mini"),
       maxRetries: 1,
       maxOutputTokens: 1200,
-      system: 'You are an Arabic grammar analyst. Return ONLY valid JSON in this exact shape: {"nouns":[{"text":"...","normalized":"...","english":"...","note":"..."}]}. Identify only Arabic nouns and provide a concise, accurate English translation for each noun in context. Preserve noun spans exactly as written, normalize without diacritics when useful, and give a short English grammatical note. Do not include pronouns, particles, verbs, adjectives, or punctuation.',
+      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}]}. Segment the full sentence into meaningful grammatical chunks, preserving every word and punctuation mark exactly once and in order. Translate each chunk accurately in context and label its grammatical attribute concisely, such as noun phrase, verb phrase, prepositional phrase, conjunction, particle, adjective phrase, or punctuation. Do not omit or invent text.',
       prompt: text,
     })
     const json = generatedText.match(/\{[\s\S]*\}/)?.[0]
-    const parsed = json ? nounSchema.safeParse(JSON.parse(json)) : null
-    if (!parsed?.success) throw new Error("Model returned invalid noun JSON")
+    const parsed = json ? chunkSchema.safeParse(JSON.parse(json)) : null
+    if (!parsed?.success) throw new Error("Model returned invalid chunk JSON")
     return Response.json(parsed.data)
   } catch (error) {
     console.error("[v0] Arabic noun analysis failed; using local fallback", error)
     // Keep the feature useful during transient gateway/model failures instead
     // of turning the whole analysis section into an error state.
-    return Response.json({ nouns: heuristicNouns(text), source: "fallback" })
+    return Response.json({ chunks: heuristicChunks(text), source: "fallback" })
   }
 }
 

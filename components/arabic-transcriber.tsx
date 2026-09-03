@@ -105,7 +105,7 @@ export function ArabicTranscriber({
   const [copiedEnglish, setCopiedEnglish] = useState(false)
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
-  const [nounResults, setNounResults] = useState<{ text: string; normalized: string; english: string; note: string }[]>([])
+  const [chunkResults, setChunkResults] = useState<{ text: string; translation: string; attribute: string }[]>([])
   const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
   const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
@@ -167,7 +167,7 @@ export function ArabicTranscriber({
   useEffect(() => {
     const text = arabicText.trim()
     if (!text) {
-      setNounResults([])
+      setChunkResults([])
       setNounAnalysisError("")
       return
     }
@@ -183,10 +183,10 @@ export function ArabicTranscriber({
         })
         const data = await response.json()
         if (!response.ok) throw new Error(data?.error || "Analysis failed")
-        if (!cancelled) setNounResults(Array.isArray(data?.nouns) ? data.nouns : [])
+        if (!cancelled) setChunkResults(Array.isArray(data?.chunks) ? data.chunks : [])
       } catch {
         if (!cancelled) {
-          setNounResults([])
+          setChunkResults([])
           setNounAnalysisError("Noun analysis is unavailable right now.")
         }
       } finally {
@@ -475,30 +475,32 @@ export function ArabicTranscriber({
                 <section aria-labelledby="arabic-nouns-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h2 id="arabic-nouns-heading" className="text-sm font-semibold">Identified nouns</h2>
+                      <h2 id="arabic-nouns-heading" className="text-sm font-semibold">Sentence chunk analysis</h2>
                       <p className="text-xs text-muted-foreground">AI-assisted Arabic grammar analysis</p>
                     </div>
                     {isAnalyzingNouns && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Analyzing nouns" />}
                   </div>
                   {nounAnalysisError ? (
                     <p className="text-sm text-muted-foreground">{nounAnalysisError}</p>
-                  ) : nounResults.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {nounResults.map((noun, index) => (
-                        <div key={`${noun.text}-${index}`} className="rounded-md border bg-background px-3 py-2">
-                          <div className="flex items-baseline gap-2">
-                            <span lang="ar" dir="rtl" className="text-lg">{noun.text}</span>
-                            <span className="font-mono text-xs text-muted-foreground">{toLatin(noun.text)}</span>
-                          </div>
-                          <div className="mt-1 flex items-baseline gap-2">
-                            <span className="text-sm text-foreground font-medium">{noun.english}</span>
-                          </div>
-                          {noun.note && <p className="mt-1 text-xs text-muted-foreground">{noun.note}</p>}
-                        </div>
-                      ))}
+                  ) : chunkResults.length > 0 ? (
+                    <div className="overflow-x-auto rounded-md border bg-background">
+                      <table className="w-full text-sm">
+                        <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                          <tr><th className="px-3 py-2 font-medium">Chunk</th><th className="px-3 py-2 font-medium">Translation</th><th className="px-3 py-2 font-medium">Attribute</th></tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {chunkResults.map((chunk, index) => (
+                            <tr key={`${chunk.text}-${index}`}>
+                              <td lang="ar" dir="rtl" className="px-3 py-2 text-base">{chunk.text}</td>
+                              <td className="px-3 py-2 text-foreground">{chunk.translation}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{chunk.attribute}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   ) : isAnalyzingNouns ? (
-                    <p className="text-sm text-muted-foreground">Identifying nouns…</p>
+                    <p className="text-sm text-muted-foreground">Analyzing sentence chunks…</p>
                   ) : (
                     <p className="text-sm text-muted-foreground">No nouns identified.</p>
                   )}
