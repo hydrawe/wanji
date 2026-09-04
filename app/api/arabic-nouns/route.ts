@@ -1,13 +1,16 @@
 import { gateway, generateText } from "ai"
 import { z } from "zod"
 
-const nounSchema = z.object({
-  nouns: z.array(z.object({
+const chunkSchema = z.object({
+  chunks: z.array(z.object({
     text: z.string(),
-    normalized: z.string(),
-    english: z.string(),
-    note: z.string(),
+    translation: z.string(),
+    attribute: z.string(),
   })),
+  vocabulary: z.array(z.object({
+    arabic: z.string(),
+    translation: z.string(),
+  })).default([]),
 })
 
 const nounTranslations: Record<string, string> = {
@@ -22,41 +25,63 @@ const nounTranslations: Record<string, string> = {
 // unavailable. Arabic morphology alone cannot reliably distinguish nouns from
 // adjectives, so use a curated vocabulary and explicit exclusions rather than
 // treating endings such as ة or ية as proof of nounhood.
-function heuristicNouns(text: string) {
-  const tokens = text.split(/\s+/).filter(Boolean)
-  const normalize = (value: string) => value
-    .replace(/^[ووفبكلس]+(?=ال)/u, "")
+const fallbackTranslations: Record<string, string> = {
+  وبما: "and since", بما: "since", أن: "that", و: "and", ب: "with/by", ل: "for/to",
+  فقد: "then/so", قد: "may/already", يكون: "be/may be", لها: "for it/them",
+  أو: "or", ما: "what/that", مثل: "such as", من: "from/of", في: "in",
+  الأجسام: "the bodies", المضادّة: "antibodies",
+  "المُضادَّة": "antibodies", وحيدة: "single", النسيلة: "monoclonal",
+  غالبًا: "often", تستخدم: "are used", لتثبيط: "to suppress",
+  الجهاز: "the system", المناعي: "immune", آثار: "effects", جانبية: "side", سيئة: "bad",
+  زيادة: "increasing", خطر: "risk", العدوى: "infection", والعدوى: "and the infection",
+  السرطان: "cancer", الإصابة: "developing", بأمراض: "diseases",
+  المناعة: "immunity", الذاتية: "autoimmune",
+}
+
+function normalizeArabic(value: string) {
+  return value
     .replace(/[ًٌٍَُِّْـ]/gu, "")
     .replace(/[إأآٱ]/gu, "ا")
     .replace(/ى/gu, "ي")
-    .replace(/^[،؛.!؟,:«»]+|[،؛.!؟,:«»]+$/gu, "")
+}
 
-  const nounVocabulary = new Set([
-    "جسم", "اجسام", "الاجسام", "نسيلة", "النسيلة", "جهاز", "الجهاز",
-    "اثر", "اثار", "اثر", "زيادة", "خطر", "العدوى", "العدوي", "عدوى", "عدوي", "السرطان",
-    "سرطان", "الإصابة", "الاصابة", "اصابة", "امراض", "أمراض", "المناعة",
-    "مناعة", "السرطان", "سرطان",
-  ])
-  const nonNounVocabulary = new Set([
-    "المضادة", "مضادة", "وحيدة", "حيدة", "غالبا", "يكون", "تستخدم",
-    "لتثبيط", "المناعي", "مناعي", "جانبية", "سيئة", "الذاتية", "ذاتية",
-    "مثل", "فقد", "قد", "لها", "أو", "و", "أن",
-  ])
+function heuristicVocabulary(text: string) {
+  const words = text.match(/[\u0600-\u06ff]+/gu) ?? []
+  const normalizedTranslations = new Map(
+    Object.entries(fallbackTranslations).map(([word, translation]) => [normalizeArabic(word), translation]),
+  )
+  return words.filter((word, index, list) => list.indexOf(word) === index).map((arabic) => ({
+    arabic,
+    translation: normalizedTranslations.get(normalizeArabic(arabic)) ?? "See sentence translation",
+  }))
+}
 
-  const results = tokens
-    .map((original) => ({ original, token: original.replace(/^[و、،؛]+/u, "").replace(/[،؛.!؟,:«»]+$/gu, "") }))
-    .map(({ original, token }) => ({ original, token, normalized: normalize(token) }))
-    .filter(({ normalized }) => normalized && !nonNounVocabulary.has(normalized))
-    .filter(({ normalized }) => nounVocabulary.has(normalized))
-    .filter(({ token }, index, list) => list.findIndex((item) => item.token === token) === index)
-    .map(({ token, normalized }) => ({
-      text: token,
-      normalized,
-      english: nounTranslations[normalized] ?? token,
-      note: "Arabic noun (local fallback)",
-    }))
+function heuristicChunks(text: string) {
+  // Keep the fallback useful when the model is unavailable by returning
+  // meaningful sentence components rather than one row per word or one row
+  // for the whole clause.
+  const parts = text
+    .split(/(?=[،؛.!؟])|(?<=،|؛|!|؟|\.)|(?=\b(?:و?بما أن|فقد|مثل|أو|ل|ب|ك)\b)/u)
+    .map((part) => part.trim())
+    .filter(Boolean)
 
-  return results
+  const translate = (part: string) => part
+    .replace(/[،؛.!؟]/gu, "")
+    .split(/\s+/u)
+    .map((token) => fallbackTranslations[token] ?? token)
+    .join(" ")
+
+  return parts.map((part) => ({
+    text: part,
+    translation: translate(part),
+    attribute: /[،؛.!؟]$/u.test(part)
+      ? "clause / sentence boundary"
+      : /^(?:و?بما أن|فقد|مثل|أو)\b/u.test(part)
+        ? "conjunction or discourse phrase"
+        : /\b(?:تستخدم|يكون|تثبيط|الإصابة)\b/u.test(part)
+          ? "verb phrase"
+          : "noun phrase or modifier",
+  }))
 }
 
 export async function POST(request: Request) {
@@ -64,25 +89,25 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     text = typeof body?.text === "string" ? body.text.trim() : ""
-    if (!text) return Response.json({ nouns: [] })
+    if (!text) return Response.json({ chunks: [] })
     if (text.length > 2000) return Response.json({ error: "Text is too long." }, { status: 400 })
 
     const { text: generatedText } = await generateText({
       model: gateway("openai/gpt-4.1-mini"),
       maxRetries: 1,
       maxOutputTokens: 1200,
-      system: 'You are an Arabic grammar analyst. Return ONLY valid JSON in this exact shape: {"nouns":[{"text":"...","normalized":"...","english":"...","note":"..."}]}. Identify only Arabic nouns and provide a concise, accurate English translation for each noun in context. Preserve noun spans exactly as written, normalize without diacritics when useful, and give a short English grammatical note. Do not include pronouns, particles, verbs, adjectives, or punctuation.',
+      system: 'You are an Arabic sentence analyst. Return ONLY valid JSON in this exact shape: {"chunks":[{"text":"...","translation":"...","attribute":"..."}],"vocabulary":[{"arabic":"...","translation":"..."}]}. The vocabulary array must contain each distinct Arabic word in its original left-to-right reading order, with its direct contextual English meaning. Never align vocabulary by English word position. Segment the full sentence into only meaningful, coherent grammatical constituents. Do not split merely to satisfy a word limit, and do not return an entire sentence or clause as one chunk when it contains multiple roles. Keep each chunk intact as the smallest natural unit that expresses one function: subject noun phrase, verb phrase, direct object noun phrase, prepositional phrase, purpose phrase, adverbial phrase, adjective phrase, conjunction, or subordinate clause component. Chunk length is flexible; coherence and grammatical function matter more than word count. Preserve every word and punctuation mark exactly once and in order. Translate each component accurately in context and label its grammatical role. Only use a one-word chunk for an independent particle, conjunction, or punctuation mark.',
       prompt: text,
     })
     const json = generatedText.match(/\{[\s\S]*\}/)?.[0]
-    const parsed = json ? nounSchema.safeParse(JSON.parse(json)) : null
-    if (!parsed?.success) throw new Error("Model returned invalid noun JSON")
+    const parsed = json ? chunkSchema.safeParse(JSON.parse(json)) : null
+    if (!parsed?.success) throw new Error("Model returned invalid chunk JSON")
     return Response.json(parsed.data)
   } catch (error) {
     console.error("[v0] Arabic noun analysis failed; using local fallback", error)
     // Keep the feature useful during transient gateway/model failures instead
     // of turning the whole analysis section into an error state.
-    return Response.json({ nouns: heuristicNouns(text), source: "fallback" })
+    return Response.json({ chunks: heuristicChunks(text), vocabulary: heuristicVocabulary(text), source: "fallback" })
   }
 }
 

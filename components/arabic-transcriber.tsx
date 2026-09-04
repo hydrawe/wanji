@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -105,9 +105,7 @@ export function ArabicTranscriber({
   const [copiedEnglish, setCopiedEnglish] = useState(false)
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
-  const [nounResults, setNounResults] = useState<{ text: string; normalized: string; english: string; note: string }[]>([])
-  const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
-  const [nounAnalysisError, setNounAnalysisError] = useState("")
+  const [vocabularyRows, setVocabularyRows] = useState<{ arabic: string; translation: string }[]>([])
   const [showKeyboard, setShowKeyboard] = useState(true)
   const [isTranslating, setIsTranslating] = useState(false)
   // Tracks which field the user last edited so we know the translation direction
@@ -167,14 +165,11 @@ export function ArabicTranscriber({
   useEffect(() => {
     const text = arabicText.trim()
     if (!text) {
-      setNounResults([])
-      setNounAnalysisError("")
+      setVocabularyRows([])
       return
     }
     let cancelled = false
     const timer = setTimeout(async () => {
-      setIsAnalyzingNouns(true)
-      setNounAnalysisError("")
       try {
         const response = await fetch("/api/arabic-nouns", {
           method: "POST",
@@ -183,14 +178,22 @@ export function ArabicTranscriber({
         })
         const data = await response.json()
         if (!response.ok) throw new Error(data?.error || "Analysis failed")
-        if (!cancelled) setNounResults(Array.isArray(data?.nouns) ? data.nouns : [])
-      } catch {
+
+        // Map each Arabic word independently in source order. Do not align
+        // against the translated sentence, whose English word order differs.
+        const arabicWords = text.match(/[\u0600-\u06ff]+/gu) ?? []
+        const uniqueWords = arabicWords.filter((word, index, list) => list.indexOf(word) === index)
+        const translatedWords = await Promise.all(
+          uniqueWords.map(async (arabic) => ({
+            arabic,
+            translation: await fetchTranslation(arabic, "ar|en"),
+          })),
+        )
         if (!cancelled) {
-          setNounResults([])
-          setNounAnalysisError("Noun analysis is unavailable right now.")
+          setVocabularyRows(translatedWords.filter((row) => row.translation))
         }
-      } finally {
-        if (!cancelled) setIsAnalyzingNouns(false)
+      } catch {
+        if (!cancelled) setVocabularyRows([])
       }
     }, 800)
     return () => {
@@ -471,37 +474,28 @@ export function ArabicTranscriber({
             </div>
           </div>
 
-              {arabicText.trim() && (
-                <section aria-labelledby="arabic-nouns-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 id="arabic-nouns-heading" className="text-sm font-semibold">Identified nouns</h2>
-                      <p className="text-xs text-muted-foreground">AI-assisted Arabic grammar analysis</p>
-                    </div>
-                    {isAnalyzingNouns && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Analyzing nouns" />}
+              {vocabularyRows.length > 0 && (
+                <section aria-labelledby="vocabulary-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                  <div>
+                    <h2 id="vocabulary-heading" className="text-sm font-semibold">Vocabulary mapping</h2>
+                    <p className="text-xs text-muted-foreground">Each source word mapped to its transliteration and English meaning in original order</p>
                   </div>
-                  {nounAnalysisError ? (
-                    <p className="text-sm text-muted-foreground">{nounAnalysisError}</p>
-                  ) : nounResults.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {nounResults.map((noun, index) => (
-                        <div key={`${noun.text}-${index}`} className="rounded-md border bg-background px-3 py-2">
-                          <div className="flex items-baseline gap-2">
-                            <span lang="ar" dir="rtl" className="text-lg">{noun.text}</span>
-                            <span className="font-mono text-xs text-muted-foreground">{toLatin(noun.text)}</span>
-                          </div>
-                          <div className="mt-1 flex items-baseline gap-2">
-                            <span className="text-sm text-foreground font-medium">{noun.english}</span>
-                          </div>
-                          {noun.note && <p className="mt-1 text-xs text-muted-foreground">{noun.note}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : isAnalyzingNouns ? (
-                    <p className="text-sm text-muted-foreground">Identifying nouns…</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No nouns identified.</p>
-                  )}
+                  <div className="overflow-x-auto rounded-md border bg-background">
+                    <table className="w-full text-sm">
+                      <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                        <tr><th className="px-3 py-2 font-medium">Arabic</th><th className="px-3 py-2 font-medium">Wei</th><th className="px-3 py-2 font-medium">English</th></tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {vocabularyRows.map((row, index) => (
+                          <tr key={`${row.arabic}-${index}`}>
+                            <td lang="ar" dir="rtl" className="px-3 py-2 text-base">{row.arabic}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{toLatin(row.arabic)}</td>
+                            <td className="px-3 py-2">{row.translation}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </section>
               )}
 
