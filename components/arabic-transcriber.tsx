@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -106,6 +106,16 @@ export function ArabicTranscriber({
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
   const [chunkResults, setChunkResults] = useState<{ text: string; translation: string; attribute: string }[]>([])
+  const vocabularyRows = useMemo(() => {
+    if (!arabicText.trim() || !englishText.trim()) return []
+    const arabicWords = arabicText.match(/[\u0600-\u06ff]+/gu) ?? []
+    const englishWords = englishText.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) ?? []
+    return arabicWords.map((word, index) => ({
+      arabic: word,
+      latin: toLatin(word),
+      english: englishWords[index] ?? "",
+    })).filter((row) => row.english)
+  }, [arabicText, englishText, toLatin])
   const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
   const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
@@ -470,6 +480,31 @@ export function ArabicTranscriber({
               )}
             </div>
           </div>
+
+              {vocabularyRows.length > 0 && (
+                <section aria-labelledby="vocabulary-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                  <div>
+                    <h2 id="vocabulary-heading" className="text-sm font-semibold">Vocabulary mapping</h2>
+                    <p className="text-xs text-muted-foreground">Arabic words mapped to their transliteration and English meaning</p>
+                  </div>
+                  <div className="overflow-x-auto rounded-md border bg-background">
+                    <table className="w-full text-sm">
+                      <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                        <tr><th className="px-3 py-2 font-medium">Arabic</th><th className="px-3 py-2 font-medium">Wei</th><th className="px-3 py-2 font-medium">English</th></tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {vocabularyRows.map((row, index) => (
+                          <tr key={`${row.arabic}-${index}`}>
+                            <td lang="ar" dir="rtl" className="px-3 py-2 text-base">{row.arabic}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{row.latin}</td>
+                            <td className="px-3 py-2">{row.english}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
 
               {arabicText.trim() && (
                 <section aria-labelledby="arabic-nouns-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
