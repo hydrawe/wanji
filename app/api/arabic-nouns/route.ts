@@ -26,21 +26,33 @@ const nounTranslations: Record<string, string> = {
 // adjectives, so use a curated vocabulary and explicit exclusions rather than
 // treating endings such as ة or ية as proof of nounhood.
 const fallbackTranslations: Record<string, string> = {
-  وبما: "and since", أن: "that", الأجسام: "the bodies", المضادّة: "antibodies",
+  وبما: "and since", بما: "since", أن: "that", و: "and", ب: "with/by", ل: "for/to",
+  فقد: "then/so", قد: "may/already", يكون: "be/may be", لها: "for it/them",
+  أو: "or", ما: "what/that", مثل: "such as", من: "from/of", في: "in",
+  الأجسام: "the bodies", المضادّة: "antibodies",
   "المُضادَّة": "antibodies", وحيدة: "single", النسيلة: "monoclonal",
-  غالبًا: "often", ما: "what/that", تستخدم: "are used", لتثبيط: "to suppress",
-  الجهاز: "the system", المناعي: "immune", فقد: "then", يكون: "may be",
-  لها: "they have", آثار: "effects", جانبية: "side", سيئة: "bad",
-  مثل: "such as", زيادة: "increasing", خطر: "risk", العدوى: "infection", والعدوى: "and the infection",
-  أو: "or", السرطان: "cancer", الإصابة: "developing", بأمراض: "diseases",
+  غالبًا: "often", تستخدم: "are used", لتثبيط: "to suppress",
+  الجهاز: "the system", المناعي: "immune", آثار: "effects", جانبية: "side", سيئة: "bad",
+  زيادة: "increasing", خطر: "risk", العدوى: "infection", والعدوى: "and the infection",
+  السرطان: "cancer", الإصابة: "developing", بأمراض: "diseases",
   المناعة: "immunity", الذاتية: "autoimmune",
+}
+
+function normalizeArabic(value: string) {
+  return value
+    .replace(/[ًٌٍَُِّْـ]/gu, "")
+    .replace(/[إأآٱ]/gu, "ا")
+    .replace(/ى/gu, "ي")
 }
 
 function heuristicVocabulary(text: string) {
   const words = text.match(/[\u0600-\u06ff]+/gu) ?? []
+  const normalizedTranslations = new Map(
+    Object.entries(fallbackTranslations).map(([word, translation]) => [normalizeArabic(word), translation]),
+  )
   return words.filter((word, index, list) => list.indexOf(word) === index).map((arabic) => ({
     arabic,
-    translation: fallbackTranslations[arabic] ?? "translation unavailable",
+    translation: normalizedTranslations.get(normalizeArabic(arabic)) ?? "See sentence translation",
   }))
 }
 
