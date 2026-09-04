@@ -105,10 +105,7 @@ export function ArabicTranscriber({
   const [copiedEnglish, setCopiedEnglish] = useState(false)
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
-  const [chunkResults, setChunkResults] = useState<{ text: string; translation: string; attribute: string }[]>([])
   const [vocabularyRows, setVocabularyRows] = useState<{ arabic: string; translation: string }[]>([])
-  const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
-  const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
   const [isTranslating, setIsTranslating] = useState(false)
   // Tracks which field the user last edited so we know the translation direction
@@ -168,15 +165,11 @@ export function ArabicTranscriber({
   useEffect(() => {
     const text = arabicText.trim()
     if (!text) {
-      setChunkResults([])
       setVocabularyRows([])
-      setNounAnalysisError("")
       return
     }
     let cancelled = false
     const timer = setTimeout(async () => {
-      setIsAnalyzingNouns(true)
-      setNounAnalysisError("")
       try {
         const response = await fetch("/api/arabic-nouns", {
           method: "POST",
@@ -186,16 +179,10 @@ export function ArabicTranscriber({
         const data = await response.json()
         if (!response.ok) throw new Error(data?.error || "Analysis failed")
         if (!cancelled) {
-          setChunkResults(Array.isArray(data?.chunks) ? data.chunks : [])
           setVocabularyRows(Array.isArray(data?.vocabulary) ? data.vocabulary : [])
         }
       } catch {
-        if (!cancelled) {
-          setChunkResults([])
-          setNounAnalysisError("Noun analysis is unavailable right now.")
-        }
-      } finally {
-        if (!cancelled) setIsAnalyzingNouns(false)
+        if (!cancelled) setVocabularyRows([])
       }
     }, 800)
     return () => {
@@ -480,7 +467,7 @@ export function ArabicTranscriber({
                 <section aria-labelledby="vocabulary-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
                   <div>
                     <h2 id="vocabulary-heading" className="text-sm font-semibold">Vocabulary mapping</h2>
-                    <p className="text-xs text-muted-foreground">Arabic words mapped to their transliteration and English meaning</p>
+                    <p className="text-xs text-muted-foreground">Each source word mapped to its transliteration and English meaning in original order</p>
                   </div>
                   <div className="overflow-x-auto rounded-md border bg-background">
                     <table className="w-full text-sm">
@@ -498,42 +485,6 @@ export function ArabicTranscriber({
                       </tbody>
                     </table>
                   </div>
-                </section>
-              )}
-
-              {arabicText.trim() && (
-                <section aria-labelledby="arabic-nouns-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 id="arabic-nouns-heading" className="text-sm font-semibold">Sentence chunk analysis</h2>
-                      <p className="text-xs text-muted-foreground">AI-assisted Arabic grammar analysis</p>
-                    </div>
-                    {isAnalyzingNouns && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Analyzing nouns" />}
-                  </div>
-                  {nounAnalysisError ? (
-                    <p className="text-sm text-muted-foreground">{nounAnalysisError}</p>
-                  ) : chunkResults.length > 0 ? (
-                    <div className="overflow-x-auto rounded-md border bg-background">
-                      <table className="w-full text-sm">
-                        <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                          <tr><th className="px-3 py-2 font-medium">Chunk</th><th className="px-3 py-2 font-medium">Translation</th><th className="px-3 py-2 font-medium">Attribute</th></tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {chunkResults.map((chunk, index) => (
-                            <tr key={`${chunk.text}-${index}`}>
-                              <td lang="ar" dir="rtl" className="px-3 py-2 text-base">{chunk.text}</td>
-                              <td className="px-3 py-2 text-foreground">{chunk.translation}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{chunk.attribute}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : isAnalyzingNouns ? (
-                    <p className="text-sm text-muted-foreground">Analyzing sentence chunks…</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No sentence chunks identified.</p>
-                  )}
                 </section>
               )}
 
