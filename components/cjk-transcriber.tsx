@@ -90,6 +90,7 @@ export function CjkTranscriber({
   const [latinText, setLatinText] = useState("")
   const [englishText, setEnglishText] = useState("")
   const [chineseText, setChineseText] = useState("")
+  const [vocabularyRows, setVocabularyRows] = useState<{ source: string; latin: string; english: string }[]>([])
   const [copiedLatin, setCopiedLatin] = useState(false)
   const [copiedScript, setCopiedScript] = useState(false)
   const [copiedEnglish, setCopiedEnglish] = useState(false)
@@ -216,6 +217,29 @@ export function CjkTranscriber({
       return ""
     }
   }
+
+  const sourceUnits = useMemo(() => {
+    if (!scriptText.trim()) return []
+    if (langCode === "ja") return scriptText.match(/[一-龯々〆ヵヶぁ-ゖァ-ヺー]+|[^\s]/gu) ?? []
+    return scriptText.trim().split(/\s+/u).filter(Boolean)
+  }, [scriptText, langCode])
+
+  // Translate each source-language unit independently, preserving source order.
+  useEffect(() => {
+    let cancelled = false
+    if (!scriptText.trim() || !englishText.trim() || sourceUnits.length === 0) {
+      setVocabularyRows([])
+      return () => { cancelled = true }
+    }
+    Promise.all(sourceUnits.map(async (unit) => ({
+      source: unit,
+      latin: toLatin(unit),
+      english: await fetchTranslation(unit, `${langCode}|en`),
+    }))).then((rows) => {
+      if (!cancelled) setVocabularyRows(rows.filter((row) => row.english))
+    })
+    return () => { cancelled = true }
+  }, [scriptText, englishText, langCode, sourceUnits, toLatin])
 
   // Bidirectional translation: the edited field drives the other three
   useEffect(() => {
@@ -360,8 +384,9 @@ export function CjkTranscriber({
     setScriptText("")
     setLatinText("")
     setEnglishText("")
-    setChineseText("")
-    setSource(null)
+  setChineseText("")
+  setVocabularyRows([])
+  setSource(null)
     lastProcessedRef.current = ""
   }
 
@@ -643,6 +668,31 @@ export function CjkTranscriber({
               </div>
             </div>
           </div>
+
+          {vocabularyRows.length > 0 && (
+            <section aria-labelledby="cjk-vocabulary-heading" className="space-y-3 rounded-lg border bg-muted/20 p-4">
+              <div>
+                <h2 id="cjk-vocabulary-heading" className="text-sm font-semibold">Vocabulary mapping</h2>
+                <p className="text-xs text-muted-foreground">Each {scriptName} unit mapped to Wei and English in source order</p>
+              </div>
+              <div className="overflow-x-auto rounded-md border bg-background">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                    <tr><th className="px-3 py-2 font-medium">{scriptName}</th><th className="px-3 py-2 font-medium">Wei</th><th className="px-3 py-2 font-medium">English</th></tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {vocabularyRows.map((row, index) => (
+                      <tr key={`${row.source}-${index}`}>
+                        <td lang={langCode} className="px-3 py-2 text-base">{row.source}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{row.latin}</td>
+                        <td className="px-3 py-2">{row.english}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Virtual Keyboard */}
           <div className="space-y-2">
