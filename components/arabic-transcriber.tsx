@@ -178,8 +178,19 @@ export function ArabicTranscriber({
         })
         const data = await response.json()
         if (!response.ok) throw new Error(data?.error || "Analysis failed")
+
+        // Map each Arabic word independently in source order. Do not align
+        // against the translated sentence, whose English word order differs.
+        const arabicWords = text.match(/[\u0600-\u06ff]+/gu) ?? []
+        const uniqueWords = arabicWords.filter((word, index, list) => list.indexOf(word) === index)
+        const translatedWords = await Promise.all(
+          uniqueWords.map(async (arabic) => ({
+            arabic,
+            translation: await fetchTranslation(arabic, "ar|en"),
+          })),
+        )
         if (!cancelled) {
-          setVocabularyRows(Array.isArray(data?.vocabulary) ? data.vocabulary : [])
+          setVocabularyRows(translatedWords.filter((row) => row.translation))
         }
       } catch {
         if (!cancelled) setVocabularyRows([])
