@@ -79,27 +79,10 @@ const LEAD: [string, string][] = [
 // "y"-prefixed / doubled-stroke vowels carry a [y] glide. Compound vowels
 // (diphthongs) combine two vowel qualities.
 const VOWEL: [string, string][] = [
-  ["a", "ㅏ"],
-  ["ae", "ㅐ"],
-  ["ia", "ㅑ"],
-  ["ie", "ㅒ"],
-  ["eo", "ㅓ"],
-  ["e", "ㅔ"],
-  ["ya", "ㅕ"],
-  ["ye", "ㅖ"],
-  ["o", "ㅗ"],
-  ["wa", "ㅘ"],
-  ["ue", "ㅙ"],
-  ["oe", "ㅚ"],
-  ["io", "ㅛ"],
-  ["u", "ㅜ"],
-  ["wo", "ㅝ"],
-  ["we", "ㅞ"],
-  ["yi", "ㅟ"],
-  ["yu", "ㅠ"],
-  ["eu", "ㅡ"],
-  ["ui", "ㅢ"],
-  ["i", "ㅣ"],
+  ["a", "ㅏ"], ["ae", "ㅐ"], ["ia", "ㅑ"], ["ie", "ㅒ"], ["eo", "ㅓ"], ["e", "ㅔ"],
+  ["ya", "ㅕ"], ["ye", "ㅖ"], ["o", "ㅗ"], ["wa", "ㅘ"], ["ue", "ㅙ"], ["oe", "ㅚ"],
+  ["io", "ㅛ"], ["u", "ㅜ"], ["wo", "ㅝ"], ["we", "ㅞ"], ["yi", "ㅟ"], ["yu", "ㅠ"],
+  ["eu", "ㅡ"], ["ui", "ㅢ"], ["i", "ㅣ"],
 ]
 
 // --- Final consonants (jongseong), index 1-27 (0 = none) -------------------
@@ -537,7 +520,9 @@ export const koreanReference: ReferenceItem[] = [
       ipa: LEAD_IPA_BY_INDEX[i],
     })),
   { char: "ㅇ", latin: "(none)", description: "Silent initial — just type the vowel" },
-  ...VOWEL.map(([code, jamo], i) => ({ char: jamo, latin: code, description: "Vowel", ipa: VOWEL_IPA_BY_INDEX[i] })),
+  ...[0, 2, 4, 6, 8, 12, 13, 17, 18, 20, 1, 3, 5, 7, 11, 9, 10, 16, 14, 15, 19].map((i) => ({
+    char: VOWEL[i][1], latin: VOWEL[i][0], description: "Vowel", ipa: VOWEL_IPA_BY_INDEX[i],
+  })),
   ...TAIL.map(([code, jamo], i) => ({
     char: jamo,
     latin: code,
