@@ -106,16 +106,7 @@ export function ArabicTranscriber({
   const [copiedChinese, setCopiedChinese] = useState(false)
   const [copiedIpa, setCopiedIpa] = useState(false)
   const [chunkResults, setChunkResults] = useState<{ text: string; translation: string; attribute: string }[]>([])
-  const vocabularyRows = useMemo(() => {
-    if (!arabicText.trim() || !englishText.trim()) return []
-    const arabicWords = arabicText.match(/[\u0600-\u06ff]+/gu) ?? []
-    const englishWords = englishText.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) ?? []
-    return arabicWords.map((word, index) => ({
-      arabic: word,
-      latin: toLatin(word),
-      english: englishWords[index] ?? "",
-    })).filter((row) => row.english)
-  }, [arabicText, englishText, toLatin])
+  const [vocabularyRows, setVocabularyRows] = useState<{ arabic: string; translation: string }[]>([])
   const [isAnalyzingNouns, setIsAnalyzingNouns] = useState(false)
   const [nounAnalysisError, setNounAnalysisError] = useState("")
   const [showKeyboard, setShowKeyboard] = useState(true)
@@ -178,6 +169,7 @@ export function ArabicTranscriber({
     const text = arabicText.trim()
     if (!text) {
       setChunkResults([])
+      setVocabularyRows([])
       setNounAnalysisError("")
       return
     }
@@ -193,7 +185,10 @@ export function ArabicTranscriber({
         })
         const data = await response.json()
         if (!response.ok) throw new Error(data?.error || "Analysis failed")
-        if (!cancelled) setChunkResults(Array.isArray(data?.chunks) ? data.chunks : [])
+        if (!cancelled) {
+          setChunkResults(Array.isArray(data?.chunks) ? data.chunks : [])
+          setVocabularyRows(Array.isArray(data?.vocabulary) ? data.vocabulary : [])
+        }
       } catch {
         if (!cancelled) {
           setChunkResults([])
@@ -496,8 +491,8 @@ export function ArabicTranscriber({
                         {vocabularyRows.map((row, index) => (
                           <tr key={`${row.arabic}-${index}`}>
                             <td lang="ar" dir="rtl" className="px-3 py-2 text-base">{row.arabic}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{row.latin}</td>
-                            <td className="px-3 py-2">{row.english}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{toLatin(row.arabic)}</td>
+                            <td className="px-3 py-2">{row.translation}</td>
                           </tr>
                         ))}
                       </tbody>
