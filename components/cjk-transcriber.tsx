@@ -220,6 +220,12 @@ export function CjkTranscriber({
 
   const sourceUnits = useMemo(() => {
     if (!scriptText.trim()) return []
+    if (langCode === "ja" && typeof Intl !== "undefined" && "Segmenter" in Intl) {
+      const segmenter = new Intl.Segmenter("ja", { granularity: "word" })
+      return Array.from(segmenter.segment(scriptText))
+        .filter((segment) => segment.isWordLike)
+        .map((segment) => segment.segment)
+    }
     if (langCode === "ja") return scriptText.match(/[一-龯々〆ヵヶぁ-ゖァ-ヺー]+|[^\s]/gu) ?? []
     return scriptText.trim().split(/\s+/u).filter(Boolean)
   }, [scriptText, langCode])
@@ -233,13 +239,13 @@ export function CjkTranscriber({
     }
     Promise.all(sourceUnits.map(async (unit) => ({
       source: unit,
-      latin: toLatin(unit),
+      latin: toLatinAsync ? await toLatinAsync(unit) : toLatin(unit),
       english: await fetchTranslation(unit, `${langCode}|en`),
     }))).then((rows) => {
       if (!cancelled) setVocabularyRows(rows.filter((row) => row.english))
     })
     return () => { cancelled = true }
-  }, [scriptText, englishText, langCode, sourceUnits, toLatin])
+  }, [scriptText, englishText, langCode, sourceUnits, toLatin, toLatinAsync])
 
   // Bidirectional translation: the edited field drives the other three
   useEffect(() => {
